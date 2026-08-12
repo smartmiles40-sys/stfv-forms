@@ -223,8 +223,12 @@ export default async function handler(req, res) {
     // var: assim cada formulário publicado declara a sua origem e uma live
     // nova não precisa de redeploy. A env var é só a rede de segurança.
     sourceId: lead.source_id || process.env.BITRIX_SOURCE_ID || 'WEB',
-    // Tudo que não é campo de contato vira observação no negócio.
-    camposExtras: campos.filter((c) => !['nome', 'email', 'whatsapp'].includes(c)),
+    // Observações levam só o que NÃO tem campo próprio no Bitrix. `source_id` e
+    // `fonte` viram o campo Fonte do negócio; repeti-los no comentário só suja
+    // e faz parecer que a origem mora lá — foi exatamente essa a confusão.
+    camposExtras: campos.filter(
+      (c) => !['nome', 'email', 'whatsapp', 'source_id', 'fonte'].includes(c),
+    ),
   })
 
   if (resultado.ok) {

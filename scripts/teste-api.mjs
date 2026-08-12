@@ -196,14 +196,22 @@ await teste('WhatsApp e e-mail chegam normalizados no contato', async () => {
   assert.equal(contato.corpo.fields.EMAIL[0].VALUE, 'bruno@exemplo.com')
 })
 
-await teste('resposta da live vira observacao no negocio', async () => {
+await teste('resposta da live vira observacao, mas a fonte NAO', async () => {
+  // A fonte tem campo proprio (SOURCE_ID). Repetir no comentario suja e faz
+  // parecer que a origem mora la — confusao real que ja aconteceu.
   process.env.BITRIX_WEBHOOK_URL = BITRIX
   const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
-  const r = resFalso()
-  await saveLead(leadBom(), r)
+  const req = leadBom()
+  req.body.source_id = 'LIVE_EGITO'
+  req.body.fonte = '[Egito] - Live'
+  await saveLead(req, resFalso())
   const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
-  assert.ok(deal.corpo.fields.COMMENTS.includes('assistiu_live'))
-  assert.ok(deal.corpo.fields.COMMENTS.includes('utm_source=instagram'))
+  const obs = deal.corpo.fields.COMMENTS
+  assert.ok(obs.includes('assistiu_live'), 'a resposta da live tem que ficar na observacao')
+  assert.ok(obs.includes('utm_source=instagram'))
+  assert.ok(!obs.includes('LIVE_EGITO'), 'source_id nao pode aparecer no comentario')
+  assert.ok(!/^fonte:/m.test(obs), 'fonte nao pode aparecer no comentario')
+  assert.equal(deal.corpo.fields.SOURCE_ID, 'LIVE_EGITO', 'ela mora no campo Fonte')
 })
 
 await teste('Bitrix recusando, o lead e GUARDADO em vez de sumir', async () => {
