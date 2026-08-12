@@ -1,17 +1,22 @@
 import { useMemo, useState } from 'react'
-import { Check, Copy, Download } from 'lucide-react'
+import { Check, Copy, Download, Link2 } from 'lucide-react'
 import type { FormSpec } from '../types'
 import { gerarReactTsx } from '../generators/reactTsx'
 import { gerarHtml } from '../generators/htmlPuro'
 import { gerarApiSaveLead } from '../generators/apiSaveLead'
 import { cssPuro, cssTailwind } from '../generators/cssIdentidade'
 import { baixarArquivo } from '../lib/util'
+import PainelPublicar from './PainelPublicar'
 
 // ============================================================================
-// Saidas do gerador. Cada aba e um arquivo pronto pra colar num repo.
+// Saidas do gerador.
+//
+// A primeira aba publica e devolve um link — e o caminho normal. As outras
+// exportam arquivo, pra quando o formulario vai morar no repositorio de uma LP
+// em vez de aqui.
 // ============================================================================
 
-type Aba = 'tsx' | 'html' | 'api' | 'css' | 'json'
+type Aba = 'link' | 'tsx' | 'html' | 'api' | 'css' | 'json'
 
 const ABAS: { chave: Aba; rotulo: string; arquivo: (s: FormSpec) => string; nota: string }[] = [
   {
@@ -47,12 +52,14 @@ const ABAS: { chave: Aba; rotulo: string; arquivo: (s: FormSpec) => string; nota
 ]
 
 export default function PainelExportar({ spec }: { spec: FormSpec }) {
-  const [aba, setAba] = useState<Aba>('tsx')
+  const [aba, setAba] = useState<Aba>('link')
   const [copiado, setCopiado] = useState(false)
   const [cssModo, setCssModo] = useState<'puro' | 'tailwind'>('tailwind')
 
   const codigo = useMemo(() => {
     switch (aba) {
+      case 'link':
+        return ''
       case 'tsx':
         return gerarReactTsx(spec)
       case 'html':
@@ -66,8 +73,9 @@ export default function PainelExportar({ spec }: { spec: FormSpec }) {
     }
   }, [aba, spec, cssModo])
 
-  const meta = ABAS.find((a) => a.chave === aba)!
-  const nomeArquivo = aba === 'css' && cssModo === 'tailwind' ? 'index.css (trecho)' : meta.arquivo(spec)
+  const meta = ABAS.find((a) => a.chave === aba)
+  const nomeArquivo =
+    aba === 'css' && cssModo === 'tailwind' ? 'index.css (trecho)' : (meta?.arquivo(spec) ?? '')
 
   const copiar = async () => {
     try {
@@ -84,6 +92,15 @@ export default function PainelExportar({ spec }: { spec: FormSpec }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-1 border-b border-dark-teal/10 px-3 py-2">
+        <button
+          type="button"
+          className={`aba ${aba === 'link' ? 'aba-on' : ''}`}
+          onClick={() => setAba('link')}
+        >
+          <Link2 className="mr-1 inline h-3 w-3" />
+          Publicar
+        </button>
+        <span className="mx-1 h-4 w-px bg-dark-teal/15" aria-hidden />
         {ABAS.map((a) => (
           <button
             key={a.chave}
@@ -95,7 +112,7 @@ export default function PainelExportar({ spec }: { spec: FormSpec }) {
           </button>
         ))}
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className={`ml-auto flex items-center gap-1.5 ${aba === 'link' ? 'hidden' : ''}`}>
           {aba === 'css' && (
             <select
               className="input-builder !w-auto !py-1 text-[11px]"
@@ -121,17 +138,23 @@ export default function PainelExportar({ spec }: { spec: FormSpec }) {
         </div>
       </div>
 
-      <div className="flex items-baseline gap-2 bg-soft-green/40 px-4 py-2">
-        <code className="font-mono text-[11px] font-bold text-dark-teal">{nomeArquivo}</code>
-        <span className="text-[11px] text-dark-teal/50">{linhas} linhas</span>
-        <span className="ml-auto max-w-[60%] text-right text-[11px] leading-snug text-dark-teal/55">
-          {meta.nota}
-        </span>
-      </div>
+      {aba === 'link' ? (
+        <PainelPublicar spec={spec} />
+      ) : (
+        <>
+          <div className="flex items-baseline gap-2 bg-soft-green/40 px-4 py-2">
+            <code className="font-mono text-[11px] font-bold text-dark-teal">{nomeArquivo}</code>
+            <span className="text-[11px] text-dark-teal/50">{linhas} linhas</span>
+            <span className="ml-auto max-w-[60%] text-right text-[11px] leading-snug text-dark-teal/55">
+              {meta?.nota}
+            </span>
+          </div>
 
-      <pre className="codigo flex-1 overflow-auto bg-dark-teal p-4 text-off-white/90">
-        <code>{codigo}</code>
-      </pre>
+          <pre className="codigo flex-1 overflow-auto bg-dark-teal p-4 text-off-white/90">
+            <code>{codigo}</code>
+          </pre>
+        </>
+      )}
     </div>
   )
 }

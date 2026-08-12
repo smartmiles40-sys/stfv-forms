@@ -4,22 +4,13 @@
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
-    {
-      "source": "/((?!api/|f/).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/f/:slug", "destination": "/api/form?slug=:slug" },
+    { "source": "/((?!api/|f/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
       "source": "/((?!f/).*)",
       "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
-    },
-    {
-      "source": "/f/(.*)",
-      "headers": [
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
-        { "key": "Cache-Control", "value": "no-store, must-revalidate" }
-      ]
     }
   ]
 }

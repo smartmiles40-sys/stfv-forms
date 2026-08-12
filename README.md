@@ -121,27 +121,38 @@ acrescente um caso que passe por ele — um `if` sem caso correspondente não é
 
 ---
 
-## Formulários hospedados aqui
+## Publicar e pegar o link
 
-Além de exportar código, este projeto **hospeda formulários**. Um formulário em `public/f/`
-é servido em `/f/<slug>.html` e posta em `/api/save-lead` **do mesmo domínio** — ou seja, o
-backend existe na mesma origem, sem configuração nenhuma.
+Monte o formulário, vá na aba **Publicar**, digite a senha e clique. Você recebe o endereço
+pronto pra mandar pro pessoal:
 
-Isso resolve o modo de falha mais provável do formulário exportado: colado numa página que
-não tem a função `save-lead` publicada, **todos** os envios batem em 404. Aqui, não tem como.
-
-```bash
-npm run publicar -- caminho/do/<slug>.stfv.json
+```
+https://<projeto>.vercel.app/f/<slug>
 ```
 
-O fluxo inteiro: monte no painel → aba **Código gerado** → **JSON** → rode o comando acima →
-commit + push. O script se recusa a publicar formulário com aviso aceso — depois do deploy, o
-único sintoma de uma regra órfã é o lead indo pro lugar errado, calado.
+Publicar de novo com o mesmo endereço **atualiza** o formulário; o link não muda. Quem já
+recebeu continua com o link certo.
 
-Depois de publicar um slug novo, faltam duas coisas que o deploy não faz sozinho:
+O formulário publicado posta em `/api/save-lead` **do mesmo domínio**. Isso mata por
+construção o modo de falha mais provável do código exportado: colado numa página que não tem
+a função `save-lead`, **todos** os envios batem em 404 — não é blip, é a live inteira. Aqui o
+backend está sempre do lado.
 
-1. registrar o slug em `FORMS`, no `api/save-lead.mjs` (é a allowlist de campos);
-2. criar a env var `WEBHOOK_<SLUG>` na Vercel com o webhook do n8n.
+### Por que o painel manda a config, e não o HTML
+
+O navegador envia apenas o `FormSpec` (JSON); **quem gera a página é o servidor**. Se a rota
+aceitasse HTML pronto, quem tivesse a senha poderia hospedar qualquer página num domínio
+nosso — e domínio nosso servindo página de terceiro é matéria-prima de golpe. Recebendo só a
+config, o servidor só consegue produzir formulário. O `scripts/teste-api.mjs` existe pra que
+essa garantia não se perca numa refatoração distraída.
+
+A rota também **falha fechada**: sem `PUBLICAR_SENHA` configurada ela responde 503, em vez de
+ficar aberta. Esquecimento de configuração não pode virar porta aberta.
+
+### Depois de publicar um slug novo
+
+1. registre o slug em `FORMS`, no `api/save-lead.mjs` (é a allowlist de campos);
+2. crie a env var `WEBHOOK_<SLUG>` na Vercel com o webhook do n8n.
 
 Sem a env var o lead **não se perde** — vai pro ledger do Supabase e pros logs da função —
 mas também não chega no Bitrix. Configure antes de divulgar o link.
@@ -159,19 +170,31 @@ Padrão de deploy isolado da agência: um repositório, um project na Vercel.
 
 | Variável | Para quê | Sem ela |
 |---|---|---|
+| `PUBLICAR_SENHA` | libera a aba **Publicar** | a rota responde 503 (fecha) |
+| `SUPABASE_FORMS_URL` | projeto com `stfv_forms_publicados` | não publica nem serve |
+| `SUPABASE_FORMS_KEY` | `service_role` (a tabela tem RLS ligado) | idem |
 | `WEBHOOK_<SLUG>` | webhook do n8n daquele formulário | lead não chega no Bitrix |
-| `SUPABASE_LEADS_URL` | ledger anti-perda ([[setur-rede-leads]]) | lead fica só nos logs |
-| `SUPABASE_LEADS_KEY` | `service_role` do mesmo projeto | idem |
+| `SUPABASE_LEADS_URL` | ledger anti-perda de lead | lead fica só nos logs |
+| `SUPABASE_LEADS_KEY` | `service_role` do projeto do ledger | idem |
 
 Depois disso, push na `main` publica sozinho.
 
 ### Roteamento
 
-O `vercel.json` faz três coisas que não são óbvias:
+O `vercel.json` faz duas coisas que não são óbvias:
 
+- `/f/:slug` vai pra função `api/form`, que busca o HTML no banco;
 - o catch-all do painel exclui `/api/` e `/f/` (`/((?!api/|f/).*)`) — sem isso o SPA engoliria
-  a função e os formulários;
-- `X-Robots-Tag: noindex` em tudo: o painel é ferramenta interna e os formulários são
-  divulgados por link, não por busca;
-- `Cache-Control: no-store` em `/f/` — formulário em cache mostra pergunta velha **e regra de
-  saída velha**, que é o jeito mais silencioso de mandar a live inteira pro lugar errado.
+  a função e os formulários.
+
+O `no-store` dos formulários é setado pela própria função `api/form`, não pelo `vercel.json`:
+formulário em cache mostra pergunta velha **e regra de saída velha**, que é o jeito mais
+silencioso de mandar a live inteira pro lugar errado.
+
+### O bundle do servidor
+
+`api/_gerador.mjs` é um artefato **commitado**: as funções da Vercel são `.mjs` e não compilam
+TypeScript, e a Vercel monta as funções a partir do repositório, não da saída do build. Mexeu
+em `src/generators/`? Rode `npm run bundle:api` e commite. O `npm run verificar` falha se ele
+estiver velho — senão o painel mostraria um preview e o formulário publicado sairia outro, sem
+erro em lugar nenhum.

@@ -60,6 +60,8 @@ for (const [nome, spec] of casos) {
   writeFileSync(`.amostra/${nome}.tsx`, gerarReactTsx(spec), 'utf8')
   writeFileSync(`.amostra/${nome}.html`, gerarHtml(spec), 'utf8')
   writeFileSync(`.amostra/${nome}.save-lead.mjs`, gerarApiSaveLead(spec), 'utf8')
+  // O JSON alimenta o scripts/teste-api.mjs, que exercita a funcao de publicar.
+  writeFileSync(`.amostra/${nome}.stfv.json`, JSON.stringify(spec), 'utf8')
   console.log(`gerado: ${nome}`)
 }
 
