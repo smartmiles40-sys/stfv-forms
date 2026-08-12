@@ -68,13 +68,19 @@ export async function criarLead(base, lead, opcoes = {}) {
     stageId: opcoes.stageId ?? FUNIL_PADRAO.stageId,
   }
 
+  // A FONTE do negocio. O portal usa codigos proprios por origem
+  // (LIVE_ITALIA, 24 = [Tailandia] - Trafego, 46 = [Amazonia] - Organico...),
+  // e o dashboard comercial agrupa por eles. Mandar o generico 'WEB' nao da
+  // erro: o lead entra e some no meio de "Site", sem dar pra medir a live.
+  const sourceId = opcoes.sourceId || 'WEB'
+
   const nome = String(lead.nome || '').trim()
   const contato = await chamar(base, 'crm.contact.add', {
     fields: {
       NAME: nome,
       OPENED: 'Y',
       TYPE_ID: 'CLIENT',
-      SOURCE_ID: 'WEB',
+      SOURCE_ID: sourceId,
       ...(opcoes.responsavelId ? { ASSIGNED_BY_ID: opcoes.responsavelId } : {}),
       ...(lead.whatsapp ? { PHONE: [{ VALUE: lead.whatsapp, VALUE_TYPE: 'MOBILE' }] } : {}),
       ...(lead.email ? { EMAIL: [{ VALUE: lead.email, VALUE_TYPE: 'WORK' }] } : {}),
@@ -94,7 +100,7 @@ export async function criarLead(base, lead, opcoes = {}) {
       CATEGORY_ID: funil.categoryId,
       STAGE_ID: funil.stageId,
       OPENED: 'Y',
-      SOURCE_ID: 'WEB',
+      SOURCE_ID: sourceId,
       COMMENTS: observacoes(lead, opcoes.camposExtras ?? []),
       // Sem responsavel explicito o negocio nasce no dono do webhook — ou
       // seja, todos os leads da live cairiam numa pessoa so, fora da fila das

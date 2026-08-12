@@ -208,6 +208,10 @@ export default async function handler(req, res) {
     categoryId: process.env.BITRIX_CATEGORY_ID || FUNIL_PADRAO.categoryId,
     stageId: process.env.BITRIX_STAGE_ID || FUNIL_PADRAO.stageId,
     responsavelId,
+    // A fonte vem do PRÓPRIO formulário (campo fixo `source_id`), não de env
+    // var: assim cada formulário publicado declara a sua origem e uma live
+    // nova não precisa de redeploy. A env var é só a rede de segurança.
+    sourceId: lead.source_id || process.env.BITRIX_SOURCE_ID || 'WEB',
     // Tudo que não é campo de contato vira observação no negócio.
     camposExtras: campos.filter((c) => !['nome', 'email', 'whatsapp'].includes(c)),
   })

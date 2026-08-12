@@ -243,6 +243,32 @@ await teste('nome curto demais e recusado no servidor', async () => {
   assert.equal(r._json.error, 'nome_invalido')
 })
 
+await teste('a FONTE do formulario chega no negocio (nao o generico WEB)', async () => {
+  // O portal usa codigos proprios por origem e o dashboard agrupa por eles.
+  // Mandar 'WEB' nao da erro: o lead so some no meio de "Site".
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  delete process.env.BITRIX_SOURCE_ID
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const req = leadBom()
+  req.body.source_id = 'LIVE_ITALIA'
+  const r = resFalso()
+  await saveLead(req, r)
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  assert.equal(deal.corpo.fields.SOURCE_ID, 'LIVE_ITALIA')
+  const contato = chamadas.find((c) => c.metodo === 'crm.contact.add')
+  assert.equal(contato.corpo.fields.SOURCE_ID, 'LIVE_ITALIA', 'contato e negocio na mesma fonte')
+})
+
+await teste('sem fonte no formulario, usa a env var antes do generico', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  process.env.BITRIX_SOURCE_ID = 'LIVE_PERU'
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  await saveLead(leadBom(), resFalso())
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  assert.equal(deal.corpo.fields.SOURCE_ID, 'LIVE_PERU')
+  delete process.env.BITRIX_SOURCE_ID
+})
+
 await teste('sem BITRIX_SDR_IDS, nao manda responsavel (fica no dono do webhook)', async () => {
   process.env.BITRIX_WEBHOOK_URL = BITRIX
   delete process.env.BITRIX_SDR_IDS
