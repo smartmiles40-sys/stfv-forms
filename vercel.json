@@ -5,19 +5,16 @@
   "framework": null,
   "rewrites": [
     {
-      "//": "SPA do painel. O catch-all NAO pode engolir /api (funcao) nem /f (formularios publicados) — por isso o negative lookahead em vez de /(.*).",
       "source": "/((?!api/|f/).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
     {
-      "//": "O painel e ferramenta interna: fora de busca.",
       "source": "/((?!f/).*)",
       "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
     },
     {
-      "//": "Formularios publicados sao compartilhados por link (live, anuncio). Ficam fora de busca tambem, mas com no-store: form em cache mostra pergunta velha e regra de saida velha.",
       "source": "/f/(.*)",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
