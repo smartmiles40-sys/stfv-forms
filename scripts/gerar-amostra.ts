@@ -10,6 +10,7 @@ import { presetExpedicao, presetLive, presetSimples, presetVazio } from '../src/
 import { gerarReactTsx } from '../src/generators/reactTsx'
 import { gerarHtml } from '../src/generators/htmlPuro'
 import { gerarApiSaveLead } from '../src/generators/apiSaveLead'
+import { avisosDoSpec } from '../src/lib/avisos'
 import type { FormSpec } from '../src/types'
 
 /**
@@ -60,4 +61,95 @@ for (const [nome, spec] of casos) {
   writeFileSync(`.amostra/${nome}.html`, gerarHtml(spec), 'utf8')
   writeFileSync(`.amostra/${nome}.save-lead.mjs`, gerarApiSaveLead(spec), 'utf8')
   console.log(`gerado: ${nome}`)
+}
+
+// ---------------------------------------------------------------------------
+// Avisos: um alerta que ninguem exercita e um alerta em que nao da pra confiar.
+// Cada caso abaixo sabota o spec de um jeito que o painel NAO mostra na tela —
+// o formulario continua bonito e funcional, so manda o lead pro lugar errado.
+// ---------------------------------------------------------------------------
+let falhas = 0
+function conferir(nome: string, spec: FormSpec, esperado: RegExp | null, qtdExata?: number) {
+  const achados = avisosDoSpec(spec)
+  const bateu = esperado
+    ? achados.some((a) => esperado.test(a)) && (qtdExata === undefined || achados.length === qtdExata)
+    : achados.length === 0
+  if (bateu) {
+    console.log(`aviso ok: ${nome}`)
+  } else {
+    falhas++
+    console.error(`AVISO FALHOU: ${nome}`)
+    console.error(`  esperado: ${esperado ?? '(nenhum aviso)'}`)
+    console.error(`  recebido: ${achados.length ? achados.join(' | ') : '(nenhum)'}`)
+  }
+}
+
+/** Aplica uma mudanca no primeiro campo de escolha da live bifurcada. */
+function sabotar(mud: (spec: FormSpec) => void): FormSpec {
+  const spec = JSON.parse(JSON.stringify(liveBifurcada())) as FormSpec
+  mud(spec)
+  return spec
+}
+
+// Os presets que vao pro ar tem que sair limpos da caixa — sem falso positivo,
+// que e o que faz o usuario aprender a ignorar a caixa amarela.
+conferir('preset live nao acusa nada', presetLive(), null)
+conferir('preset live-bifurcada nao acusa nada', liveBifurcada(), null)
+conferir('preset simples nao acusa nada', presetSimples(), null)
+// A expedicao e a excecao legitima: o embed do VSL e colado depois, entao o
+// preset nasce com esse aviso aceso de proposito. Qualquer OUTRO aviso ali e bug.
+conferir('preset expedicao so acusa o embed faltando', presetExpedicao(), /vídeo sem embed/, 1)
+
+// A pegadinha principal: renomear a opcao deixa a regra orfa, calada.
+conferir(
+  'opcao renomeada deixa a regra orfa',
+  sabotar((s) => {
+    s.etapas[1].campos[0].opcoes[0].label = 'Sim, assisti tudinho'
+  }),
+  /órfã/,
+)
+
+conferir(
+  'regra apontando pra campo inexistente',
+  sabotar((s) => {
+    s.destino.regrasSaida[0].campo = 'campo_que_nao_existe'
+  }),
+  /não existe/,
+)
+
+conferir(
+  'regra sem URL de destino',
+  sabotar((s) => {
+    s.destino.regrasSaida[0].url = ''
+  }),
+  /sem URL/,
+)
+
+conferir(
+  'regra em campo de multipla escolha',
+  sabotar((s) => {
+    s.etapas[1].campos[0].tipo = 'checkbox'
+  }),
+  /múltipla escolha/,
+)
+
+conferir(
+  'saida pro WhatsApp sem mensagem',
+  sabotar((s) => {
+    s.destino.whatsappMensagem = ''
+  }),
+  /sem mensagem/,
+)
+
+conferir(
+  'placeholder da mensagem sem campo correspondente',
+  sabotar((s) => {
+    s.destino.whatsappMensagem = 'Olá, sou {nome} e meu orçamento é {orcamento_inexistente}.'
+  }),
+  /orcamento_inexistente/,
+)
+
+if (falhas) {
+  console.error(`\n${falhas} verificacao(oes) de aviso falharam.`)
+  process.exit(1)
 }

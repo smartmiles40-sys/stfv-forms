@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { FormSpec } from './types'
+import { avisosDoSpec } from './lib/avisos'
 import { PRESETS, presetExpedicao } from './defaults'
 import FormRenderer from './components/FormRenderer'
 import PainelCampos from './components/PainelCampos'
@@ -97,34 +98,7 @@ export default function App() {
   }, [])
 
   // Avisos: coisas que passam despercebidas e quebram o lead lá na frente.
-  const avisos = useMemo(() => {
-    const lista: string[] = []
-    const campos = spec.etapas.flatMap((e) => e.campos)
-    const nomes = campos.map((c) => c.name)
-
-    const semNome = campos.filter((c) => !c.name.trim()).length
-    if (semNome) lista.push(`${semNome} campo(s) sem nome — não chegam ao CRM.`)
-
-    const repetidos = [...new Set(nomes.filter((n, i) => n && nomes.indexOf(n) !== i))]
-    if (repetidos.length)
-      lista.push(`Nome repetido: ${repetidos.join(', ')} — um sobrescreve o outro no payload.`)
-
-    if (!nomes.includes('nome') || !nomes.includes('whatsapp'))
-      lista.push('Sem campo "nome" ou "whatsapp" — o backend rejeita o lead na validação.')
-
-    const semOpcoes = campos.filter(
-      (c) => ['radio', 'select', 'checkbox'].includes(c.tipo) && c.opcoes.length === 0,
-    )
-    if (semOpcoes.length) lista.push(`${semOpcoes.length} campo(s) de escolha sem opções.`)
-
-    if (!spec.destino.url.trim()) lista.push('Destino do lead vazio.')
-    if (!spec.destino.formName.trim()) lista.push('form_name vazio — o n8n roteia por ele.')
-
-    const videoSemEmbed = spec.etapas.filter((e) => e.tipo === 'video' && !e.video.embedHtml.trim())
-    if (videoSemEmbed.length) lista.push('Etapa de vídeo sem embed.')
-
-    return lista
-  }, [spec])
+  const avisos = useMemo(() => avisosDoSpec(spec), [spec])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-off-white">
