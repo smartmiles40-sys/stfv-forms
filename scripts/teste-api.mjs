@@ -243,6 +243,86 @@ await teste('nome curto demais e recusado no servidor', async () => {
   assert.equal(r._json.error, 'nome_invalido')
 })
 
+await teste('sem BITRIX_SDR_IDS, nao manda responsavel (fica no dono do webhook)', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  delete process.env.BITRIX_SDR_IDS
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const r = resFalso()
+  await saveLead(leadBom(), r)
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  assert.ok(!('ASSIGNED_BY_ID' in deal.corpo.fields))
+})
+
+await teste('rodizio distribui entre as SDRs, e contato e negocio vao pra mesma', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  process.env.BITRIX_SDR_IDS = '20781, 17191 ,2329'
+  process.env.SUPABASE_FORMS_URL = 'https://exemplo.supabase.co'
+  process.env.SUPABASE_FORMS_KEY = 'chave'
+
+  // Sequence do Postgres emulada: 1, 2, 3, 4...
+  let n = 0
+  const recebidos = []
+  globalThis.fetch = async (url, opts) => {
+    const alvo = String(url)
+    if (alvo.includes('rpc/stfv_proximo_sdr')) {
+      n += 1
+      return { ok: true, status: 200, json: async () => n }
+    }
+    const metodo = alvo.split('/').pop().replace('.json', '')
+    const corpo = JSON.parse(opts.body || '{}')
+    if (metodo === 'crm.deal.add') {
+      recebidos.push({
+        deal: corpo.fields.ASSIGNED_BY_ID,
+        contato: globalThis.__ultimoContatoAssign,
+      })
+      return { ok: true, status: 200, json: async () => ({ result: 88 }) }
+    }
+    if (metodo === 'crm.contact.add') {
+      globalThis.__ultimoContatoAssign = corpo.fields.ASSIGNED_BY_ID
+      return { ok: true, status: 200, json: async () => ({ result: 77 }) }
+    }
+    return { ok: true, status: 201, text: async () => '' }
+  }
+
+  for (let i = 0; i < 9; i++) await saveLead(leadBom(), resFalso())
+
+  const contagem = {}
+  for (const rec of recebidos) {
+    contagem[rec.deal] = (contagem[rec.deal] ?? 0) + 1
+    assert.equal(rec.contato, rec.deal, 'contato e negocio tem que ir pra mesma SDR')
+  }
+  assert.deepEqual(
+    Object.keys(contagem).sort(),
+    ['17191', '2329', '20781'].sort(),
+    `as 3 SDRs deviam receber; recebeu ${JSON.stringify(contagem)}`,
+  )
+  for (const [sdr, qtd] of Object.entries(contagem)) {
+    assert.equal(qtd, 3, `${sdr} devia receber 3 de 9, recebeu ${qtd}`)
+  }
+})
+
+await teste('rodizio fora do ar nao trava o lead', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  process.env.BITRIX_SDR_IDS = '20781,17191'
+  process.env.SUPABASE_FORMS_URL = 'https://exemplo.supabase.co'
+  process.env.SUPABASE_FORMS_KEY = 'chave'
+  const chamadas = stubBitrix({
+    'crm.contact.add': jsonOk(77),
+    'crm.deal.add': jsonOk(88),
+  })
+  // A chamada do rodizio explode; o lead tem que passar assim mesmo.
+  const fetchBase = globalThis.fetch
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('rpc/stfv_proximo_sdr')) throw new Error('supabase fora')
+    return fetchBase(url, opts)
+  }
+  const r = resFalso()
+  await saveLead(leadBom(), r)
+  assert.equal(r._status, 200)
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  assert.ok(['20781', '17191'].includes(deal.corpo.fields.ASSIGNED_BY_ID))
+})
+
 await teste('webhook sem escopo CRM e detectado pelo diagnostico', async () => {
   // A pegadinha: profile.json responde normal e todo crm.* falha.
   stubBitrix({ profile: jsonOk({ NAME: 'Bruno' }), scope: jsonOk(['']) })

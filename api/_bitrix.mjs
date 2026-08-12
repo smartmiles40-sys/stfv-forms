@@ -75,6 +75,7 @@ export async function criarLead(base, lead, opcoes = {}) {
       OPENED: 'Y',
       TYPE_ID: 'CLIENT',
       SOURCE_ID: 'WEB',
+      ...(opcoes.responsavelId ? { ASSIGNED_BY_ID: opcoes.responsavelId } : {}),
       ...(lead.whatsapp ? { PHONE: [{ VALUE: lead.whatsapp, VALUE_TYPE: 'MOBILE' }] } : {}),
       ...(lead.email ? { EMAIL: [{ VALUE: lead.email, VALUE_TYPE: 'WORK' }] } : {}),
     },
@@ -95,6 +96,11 @@ export async function criarLead(base, lead, opcoes = {}) {
       OPENED: 'Y',
       SOURCE_ID: 'WEB',
       COMMENTS: observacoes(lead, opcoes.camposExtras ?? []),
+      // Sem responsavel explicito o negocio nasce no dono do webhook — ou
+      // seja, todos os leads da live cairiam numa pessoa so, fora da fila das
+      // SDRs. O contato tambem vai pro mesmo responsavel, senao contato e
+      // negocio ficam com donos diferentes.
+      ...(opcoes.responsavelId ? { ASSIGNED_BY_ID: opcoes.responsavelId } : {}),
     },
     params: { REGISTER_SONET_EVENT: 'N' },
   })

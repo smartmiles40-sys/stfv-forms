@@ -53,6 +53,56 @@ function dataHoraSaoPaulo() {
 }
 
 /**
+ * Próxima SDR do rodízio.
+ *
+ * A ordem vem de uma sequence no Postgres porque numa live os envios chegam em
+ * rajada e várias funções rodam ao mesmo tempo: `nextval` é atômico, então duas
+ * pessoas nunca recebem o mesmo número. Um contador em memória não serviria —
+ * cada invocação serverless começa do zero.
+ *
+ * Se o sorteio falhar, cai em aleatório em vez de travar: distribuir mal é
+ * muito melhor do que não registrar o lead.
+ */
+async function proximaSdr() {
+  const ids = String(process.env.BITRIX_SDR_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (!ids.length) return null
+  if (ids.length === 1) return ids[0]
+
+  const SB_URL = process.env.SUPABASE_FORMS_URL
+  const SB_KEY = process.env.SUPABASE_FORMS_KEY
+  if (SB_URL && SB_KEY) {
+    const ctrl = new AbortController()
+    const timeout = setTimeout(() => ctrl.abort(), 4000)
+    try {
+      const resp = await fetch(`${SB_URL.replace(/\/$/, '')}/rest/v1/rpc/stfv_proximo_sdr`, {
+        method: 'POST',
+        headers: {
+          apikey: SB_KEY,
+          Authorization: `Bearer ${SB_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+        signal: ctrl.signal,
+      })
+      if (resp.ok) {
+        const n = Number(await resp.json())
+        if (Number.isFinite(n)) return ids[n % ids.length]
+      } else {
+        console.warn('[rodizio] rpc', resp.status, '— caindo pro aleatorio')
+      }
+    } catch (e) {
+      console.warn('[rodizio] indisponivel:', e?.message, '— caindo pro aleatorio')
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+  return ids[Math.floor(Math.random() * ids.length)]
+}
+
+/**
  * Rede de segurança: lead que o Bitrix recusou fica gravado pra recuperação.
  * Chave é o lead_id, então reenvio do mesmo lead atualiza em vez de duplicar.
  * Devolve true se conseguiu guardar.
@@ -153,14 +203,17 @@ export default async function handler(req, res) {
     return
   }
 
+  const responsavelId = await proximaSdr()
   const resultado = await criarLead(base, lead, {
     categoryId: process.env.BITRIX_CATEGORY_ID || FUNIL_PADRAO.categoryId,
     stageId: process.env.BITRIX_STAGE_ID || FUNIL_PADRAO.stageId,
+    responsavelId,
     // Tudo que não é campo de contato vira observação no negócio.
     camposExtras: campos.filter((c) => !['nome', 'email', 'whatsapp'].includes(c)),
   })
 
   if (resultado.ok) {
+    console.log('[bitrix] negocio', resultado.negocioId, 'para SDR', responsavelId ?? '(padrao)')
     res.status(200).json({ ok: true, negocio: resultado.negocioId })
     return
   }

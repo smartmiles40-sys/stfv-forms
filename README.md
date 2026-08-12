@@ -78,6 +78,24 @@ GET /api/bitrix-status?senha=<PUBLICAR_SENHA>
 Ele mostra o escopo real, lista as etapas do funil e diz **o nome da coluna** onde o lead vai
 cair — que é a única forma de confirmar que é a coluna certa.
 
+### Rodízio de SDR
+
+Sem `ASSIGNED_BY_ID` explícito, o negócio nasce no **dono do webhook** — ou seja, todos os
+leads da live cairiam numa pessoa só, fora da fila das SDRs. `BITRIX_SDR_IDS` resolve isso:
+
+```
+BITRIX_SDR_IDS=20781,17191,2329
+```
+
+A ordem vem de uma `sequence` no Postgres (`stfv_proximo_sdr`), não de um contador em memória:
+cada invocação serverless começa do zero, e numa live as chamadas acontecem ao mesmo tempo.
+`nextval` é atômico, então duas pessoas nunca recebem o mesmo número — que é justamente como
+duas cairiam na mesma SDR e a seguinte ficaria sem ninguém. Se o sorteio falhar, o código cai
+em aleatório em vez de travar: distribuir mal é muito melhor do que perder o lead.
+
+O contato e o negócio vão para a **mesma** SDR; separados, ela veria o negócio sem conseguir
+o telefone.
+
 ---
 
 ## Detalhes que o gerador já resolve
@@ -197,6 +215,7 @@ Padrão de deploy isolado da agência: um repositório, um project na Vercel.
 | `PUBLICAR_SENHA` | libera a aba **Publicar** e o diagnóstico | as rotas respondem 503 (fecham) |
 | `SUPABASE_FORMS_URL` | projeto com as tabelas do app | não publica, não serve, não guarda pendente |
 | `SUPABASE_FORMS_KEY` | `service_role` (as tabelas têm RLS ligado) | idem |
+| `BITRIX_SDR_IDS` | IDs das SDRs, separados por vírgula | negócio nasce no dono do webhook |
 | `BITRIX_CATEGORY_ID` | opcional — funil; padrão `25` | usa o padrão |
 | `BITRIX_STAGE_ID` | opcional — etapa; padrão `C25:PREPAYMENT_INVOIC` | usa o padrão |
 
