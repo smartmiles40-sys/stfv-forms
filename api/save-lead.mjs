@@ -26,10 +26,21 @@ const TABELA_PENDENTES = 'stfv_leads_pendentes'
  * mass-assignment e mantém o negócio do Bitrix limpo.
  */
 const FORMS = {
+  live: {
+    campos: ['expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live'],
+  },
   exemplo: {
     campos: ['expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live'],
   },
 }
+
+/**
+ * Campos que passam mesmo quando o slug não está registrado acima. `source_id`
+ * está aqui de propósito: sem ele, publicar um formulário com slug novo faria a
+ * FONTE ser descartada em silêncio e o lead cairia no genérico "Site" — o
+ * mesmo erro, de novo, sem sintoma nenhum.
+ */
+const CAMPOS_MINIMOS = ['nome', 'email', 'whatsapp', 'source_id', 'fonte', 'expedicao']
 
 const TRACK_KEYS = [
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
@@ -163,7 +174,7 @@ export default async function handler(req, res) {
   const conf = FORMS[slug]
   // Slug desconhecido não é motivo pra descartar o lead: ele segue com os campos
   // básicos. Perder lead por erro de configuração nosso é o pior desfecho.
-  const campos = conf ? conf.campos : ['nome', 'email', 'whatsapp']
+  const campos = conf ? conf.campos : CAMPOS_MINIMOS
 
   const lead = {
     lead_id:

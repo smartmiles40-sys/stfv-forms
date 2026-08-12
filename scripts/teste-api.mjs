@@ -259,6 +259,20 @@ await teste('a FONTE do formulario chega no negocio (nao o generico WEB)', async
   assert.equal(contato.corpo.fields.SOURCE_ID, 'LIVE_ITALIA', 'contato e negocio na mesma fonte')
 })
 
+await teste('slug NAO registrado ainda deixa a fonte passar', async () => {
+  // A allowlist por slug ja engoliu o source_id uma vez. Slug novo tem que
+  // continuar levando a origem, senao o lead cai no generico "Site" calado.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  delete process.env.BITRIX_SOURCE_ID
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const req = leadBom()
+  req.body.slug = 'slug-que-ninguem-registrou'
+  req.body.source_id = 'LIVE_EGITO'
+  await saveLead(req, resFalso())
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  assert.equal(deal.corpo.fields.SOURCE_ID, 'LIVE_EGITO')
+})
+
 await teste('sem fonte no formulario, usa a env var antes do generico', async () => {
   process.env.BITRIX_WEBHOOK_URL = BITRIX
   process.env.BITRIX_SOURCE_ID = 'LIVE_PERU'
