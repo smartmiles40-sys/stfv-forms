@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "tsc -b --noEmit",
+    "publicar": "esbuild scripts/publicar.ts --bundle --format=esm --platform=node --outfile=.publicar-runner.mjs --log-level=error && node .publicar-runner.mjs",
     "verificar": "esbuild scripts/gerar-amostra.ts --bundle --format=esm --platform=node --outfile=.amostra-runner.mjs --log-level=error && node .amostra-runner.mjs && tsc --noEmit --jsx react-jsx --target ES2022 --module ESNext --moduleResolution bundler --strict --noUnusedLocals --noUnusedParameters --skipLibCheck --types vite/client .amostra/expedicao.tsx .amostra/live.tsx .amostra/live-bifurcada.tsx .amostra/simples.tsx .amostra/vazio.tsx && node --check .amostra/expedicao.save-lead.mjs && node --check .amostra/live.save-lead.mjs && echo OK: codigo gerado compila nos 5 casos"
   },
   "dependencies": {

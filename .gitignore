@@ -8,3 +8,4 @@ dist-ssr
 # saída do `npm run verificar` (amostras do código gerado)
 .amostra
 .amostra-runner.mjs
+.publicar-runner.mjs

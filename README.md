@@ -121,14 +121,57 @@ acrescente um caso que passe por ele — um `if` sem caso correspondente não é
 
 ---
 
+## Formulários hospedados aqui
+
+Além de exportar código, este projeto **hospeda formulários**. Um formulário em `public/f/`
+é servido em `/f/<slug>.html` e posta em `/api/save-lead` **do mesmo domínio** — ou seja, o
+backend existe na mesma origem, sem configuração nenhuma.
+
+Isso resolve o modo de falha mais provável do formulário exportado: colado numa página que
+não tem a função `save-lead` publicada, **todos** os envios batem em 404. Aqui, não tem como.
+
+```bash
+npm run publicar -- caminho/do/<slug>.stfv.json
+```
+
+O fluxo inteiro: monte no painel → aba **Código gerado** → **JSON** → rode o comando acima →
+commit + push. O script se recusa a publicar formulário com aviso aceso — depois do deploy, o
+único sintoma de uma regra órfã é o lead indo pro lugar errado, calado.
+
+Depois de publicar um slug novo, faltam duas coisas que o deploy não faz sozinho:
+
+1. registrar o slug em `FORMS`, no `api/save-lead.mjs` (é a allowlist de campos);
+2. criar a env var `WEBHOOK_<SLUG>` na Vercel com o webhook do n8n.
+
+Sem a env var o lead **não se perde** — vai pro ledger do Supabase e pros logs da função —
+mas também não chega no Bitrix. Configure antes de divulgar o link.
+
+---
+
 ## Deploy
 
 Padrão de deploy isolado da agência: um repositório, um project na Vercel.
 
-1. Suba o repositório no GitHub (privado).
-2. Vercel → Add New Project → importe o repo.
-3. O `vercel.json` já define `buildCommand`, `outputDirectory` e o `X-Robots-Tag: noindex`
-   (é ferramenta interna, não deve aparecer em busca).
+1. Vercel → **Add New Project** → importe `smartmiles40-sys/stfv-forms`.
+2. Não mexa em build settings: o `vercel.json` já define `buildCommand`, `outputDirectory`,
+   o roteamento e os headers.
+3. **Settings → Environment Variables**, conforme o que você for usar:
 
-Nenhuma variável de ambiente é necessária: o gerador não tem backend nem banco — o que ele
-produz é código, e o código mora no repositório da LP.
+| Variável | Para quê | Sem ela |
+|---|---|---|
+| `WEBHOOK_<SLUG>` | webhook do n8n daquele formulário | lead não chega no Bitrix |
+| `SUPABASE_LEADS_URL` | ledger anti-perda ([[setur-rede-leads]]) | lead fica só nos logs |
+| `SUPABASE_LEADS_KEY` | `service_role` do mesmo projeto | idem |
+
+Depois disso, push na `main` publica sozinho.
+
+### Roteamento
+
+O `vercel.json` faz três coisas que não são óbvias:
+
+- o catch-all do painel exclui `/api/` e `/f/` (`/((?!api/|f/).*)`) — sem isso o SPA engoliria
+  a função e os formulários;
+- `X-Robots-Tag: noindex` em tudo: o painel é ferramenta interna e os formulários são
+  divulgados por link, não por busca;
+- `Cache-Control: no-store` em `/f/` — formulário em cache mostra pergunta velha **e regra de
+  saída velha**, que é o jeito mais silencioso de mandar a live inteira pro lugar errado.
