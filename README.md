@@ -80,9 +80,18 @@ gravado no ledger e a conciliação recupera depois.
   pelo `sessionStorage` como antes.
 - **Etapa de vídeo com trava** — o botão só libera depois de N segundos na etapa, com barra
   de progresso. A contagem é por *deadline*, então voltar e avançar não reinicia o relógio.
+- **Se o envio falhar, o lead ainda chega no destino** — num formulário que redireciona, o
+  erro de rede não segura ninguém: o lead é reenviado por `navigator.sendBeacon` (que
+  sobrevive à saída da página) e a navegação acontece assim mesmo. Quem chega no seu WhatsApp
+  você já tem — o número está na conversa; quem fica parado numa mensagem de erro some. Em
+  formulário que termina em mensagem não há destino, e aí o erro continua aparecendo.
 - **Avisos antes de publicar** — campo sem nome, nome repetido (um sobrescreve o outro no
   payload), campo de escolha sem opções, ausência de `nome`/`whatsapp` (o backend rejeita),
-  `form_name` vazio, etapa de vídeo sem embed.
+  `form_name` vazio, etapa de vídeo sem embed. E, nas saídas condicionais: regra apontando
+  pra campo que não existe, regra em campo que não é de escolha única, **rótulo de opção
+  renomeado que deixou a regra órfã**, regra sem URL, mensagem de WhatsApp vazia e
+  `{placeholder}` sem campo correspondente. O casamento da regra é por texto exato — sem
+  esses avisos, renomear uma opção manda todo mundo pro destino padrão em silêncio.
 
 ---
 
@@ -95,6 +104,13 @@ npm run verificar
 Gera os presets, compila os `.tsx` resultantes com TypeScript estrito (as mesmas flags das
 LPs, incluindo `noUnusedLocals`) e roda `node --check` no backend gerado. Se isso passa, o
 código exportado compila no repositório da LP.
+
+Além de compilar, o script confere duas coisas que ninguém vê quebrar: que o **caminho de
+falha** do envio leva o lead ao destino em todo formulário que redireciona, e que cada
+**aviso** realmente acende — para isso ele sabota o formulário de seis jeitos (opção
+renomeada, campo inexistente, regra sem URL, múltipla escolha, mensagem vazia, placeholder
+órfão) e exige o aviso correspondente. Também exige que os presets saiam **limpos**: falso
+positivo é o que ensina a ignorar a caixa amarela.
 
 Cada caso cobre um caminho diferente do gerador — *expedição* a etapa de vídeo, *live* o
 redirect direto pro WhatsApp, *live-bifurcada* a saída condicional, *simples* a mensagem no

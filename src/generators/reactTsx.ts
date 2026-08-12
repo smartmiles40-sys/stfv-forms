@@ -403,6 +403,48 @@ export function gerarReactTsx(spec: FormSpec): string {
   p('        formulario_completo: true,')
   p('      }')
   p('')
+  // Navegacao num lugar so: ela e usada no sucesso E na falha, e duplicar o
+  // bloco e como um caminho deixa de ser atualizado junto com o outro.
+  p('      // Pra onde este lead vai depois do envio.')
+  p('      const irParaDestino = () => {')
+  if (regras.length) {
+    p('        const saida = destinoDoLead(respostas)')
+    if (wa) {
+      p('        window.location.href = saida.whatsapp')
+      p('          ? comMensagemWhatsapp(saida.url, valores)')
+      p('          : saida.url')
+    } else {
+      p('        window.location.href = saida.url')
+    }
+  } else if (redireciona) {
+    if (wa) {
+      p('        window.location.href = comMensagemWhatsapp(REDIRECT_URL, valores)')
+    } else {
+      p('        window.location.href = REDIRECT_URL')
+    }
+  } else {
+    if (wa) p('        montarMensagemWhatsapp(valores)')
+    p('        setEnviado(true)')
+  }
+  p('      }')
+  p('')
+
+  if (redireciona) {
+    p('      // Ultima tentativa de salvar o lead quando o POST falhou. O sendBeacon')
+    p('      // sobrevive a saida da pagina, entao da pra tentar E navegar em seguida.')
+    p('      const salvarNoEscuro = () => {')
+    p('        try {')
+    p('          navigator.sendBeacon(')
+    p('            ENDPOINT,')
+    p("            new Blob([JSON.stringify(payload)], { type: 'application/json' }),")
+    p('          )')
+    p('        } catch {')
+    p('          /* sem rede: o lead vai pro destino do mesmo jeito */')
+    p('        }')
+    p('      }')
+    p('')
+  }
+
   p('      setEnviando(true)')
   p('      try {')
   p('        const resp = await fetch(ENDPOINT, {')
@@ -430,25 +472,7 @@ export function gerarReactTsx(spec: FormSpec): string {
   p('          if (navegou) return')
   p('          navegou = true')
   p('          sessionStorage.removeItem(LEAD_ID_KEY)')
-  if (regras.length) {
-    p('          const saida = destinoDoLead(respostas)')
-    if (wa) {
-      p('          window.location.href = saida.whatsapp')
-      p('            ? comMensagemWhatsapp(saida.url, valores)')
-      p('            : saida.url')
-    } else {
-      p('          window.location.href = saida.url')
-    }
-  } else if (redireciona) {
-    if (wa) {
-      p('          window.location.href = comMensagemWhatsapp(REDIRECT_URL, valores)')
-    } else {
-      p('          window.location.href = REDIRECT_URL')
-    }
-  } else {
-    if (wa) p('          montarMensagemWhatsapp(valores)')
-    p('          setEnviado(true)')
-  }
+  p('          irParaDestino()')
   p('        }')
   p('')
 
@@ -481,27 +505,21 @@ export function gerarReactTsx(spec: FormSpec): string {
   p('        if (import.meta.env.DEV) {')
   p("          // Em dev o /api nao existe (funcao roda so na Vercel) — segue o fluxo.")
   p("          console.warn('[dev] envio indisponivel, simulando sucesso:', err)")
-  if (regras.length) {
-    p('          const saida = destinoDoLead(respostas)')
-    if (wa) {
-      p('          window.location.href = saida.whatsapp')
-      p('            ? comMensagemWhatsapp(saida.url, valores)')
-      p('            : saida.url')
-    } else {
-      p('          window.location.href = saida.url')
-    }
-  } else if (redireciona) {
-    if (wa) {
-      p('          window.location.href = comMensagemWhatsapp(REDIRECT_URL, valores)')
-    } else {
-      p('          window.location.href = REDIRECT_URL')
-    }
-  } else {
-    p('          setEnviado(true)')
-  }
+  p('          irParaDestino()')
   p('          return')
   p('        }')
-  p('        setErroEnvio(true)')
+  if (redireciona) {
+    p('        // O envio falhou, mas segurar o lead aqui e o pior dos dois males:')
+    p('        // quem chega no destino a gente ja tem (o numero esta na conversa),')
+    p('        // quem fica parado numa mensagem de erro some. Tenta salvar no')
+    p('        // escuro e manda embora.')
+    p('        salvarNoEscuro()')
+    p('        sessionStorage.removeItem(LEAD_ID_KEY)')
+    p('        irParaDestino()')
+    p('        return')
+  } else {
+    p('        setErroEnvio(true)')
+  }
   p('      } finally {')
   p('        setEnviando(false)')
   p('      }')

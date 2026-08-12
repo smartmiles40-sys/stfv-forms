@@ -64,6 +64,40 @@ for (const [nome, spec] of casos) {
 }
 
 // ---------------------------------------------------------------------------
+// Caminho de FALHA do envio. Num form que redireciona (live), segurar o lead
+// numa mensagem de erro perde a pessoa: quem chega no WhatsApp a gente ja tem,
+// quem fica parado some. Entao a falha tenta salvar no escuro e navega mesmo
+// assim. Num form que termina em mensagem nao ha pra onde ir — ali o erro fica.
+// ---------------------------------------------------------------------------
+let falhasFallback = 0
+function exigir(nome: string, condicao: boolean) {
+  if (condicao) {
+    console.log(`falha ok: ${nome}`)
+  } else {
+    falhasFallback++
+    console.error(`FALLBACK FALHOU: ${nome}`)
+  }
+}
+
+for (const [nome, spec] of casos) {
+  const tsx = gerarReactTsx(spec)
+  const html = gerarHtml(spec)
+  if (spec.destino.aposEnvio === 'redirect') {
+    exigir(`${nome}: .tsx tenta salvar no escuro antes de navegar`, tsx.includes('salvarNoEscuro()'))
+    exigir(`${nome}: .tsx navega mesmo com o envio falhando`, tsx.includes('sendBeacon'))
+    exigir(`${nome}: .html navega mesmo com o envio falhando`, html.includes('navigator.sendBeacon'))
+  } else {
+    exigir(`${nome}: .tsx mantem a mensagem de erro (nao ha destino)`, tsx.includes('setErroEnvio(true)'))
+    exigir(`${nome}: .tsx nao carrega sendBeacon a toa`, !tsx.includes('sendBeacon'))
+  }
+}
+
+if (falhasFallback) {
+  console.error(`\n${falhasFallback} verificacao(oes) do caminho de falha falharam.`)
+  process.exit(1)
+}
+
+// ---------------------------------------------------------------------------
 // Avisos: um alerta que ninguem exercita e um alerta em que nao da pra confiar.
 // Cada caso abaixo sabota o spec de um jeito que o painel NAO mostra na tela —
 // o formulario continua bonito e funcional, so manda o lead pro lugar errado.
