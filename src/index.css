@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans text-dark-teal bg-off-white antialiased;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-serif;
+  }
+  ::selection {
+    background: #d7f264;
+    color: #09282b;
+  }
+}
+
+@layer components {
+  /* ==========================================================================
+     BLOCO 1 — Classes do FORMULARIO. Copia fiel do index.css das LPs
+     (Setur Trafego / Setur Unificado). O preview usa estas classes, entao o
+     que aparece no gerador e exatamente o que vai pro ar. Se mudar aqui,
+     mude tambem em src/generators/cssIdentidade.ts (que exporta a versao
+     em CSS puro pro codigo gerado).
+     ========================================================================== */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-lime hover:bg-lime-dark text-dark-teal font-semibold px-8 py-4 rounded-full transition-all duration-300 hover:shadow-lime-glow hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 border-2 border-dark-teal/20 text-dark-teal font-semibold px-8 py-4 rounded-full transition-all hover:border-dark-teal hover:bg-dark-teal/5;
+  }
+  .card {
+    @apply bg-white rounded-3xl shadow-card p-6 md:p-8;
+  }
+  .input-label {
+    @apply block text-sm font-semibold text-dark-teal mb-2;
+  }
+  .input {
+    @apply w-full rounded-xl border border-dark-teal/15 bg-off-white px-4 py-3.5 text-dark-teal placeholder:text-dark-teal/35 outline-none transition-colors focus:border-lime-dark focus:ring-2 focus:ring-lime/40;
+  }
+  .radio-group {
+    @apply flex flex-col gap-2 mt-3;
+  }
+  .radio-item {
+    @apply flex items-center gap-3 rounded-xl border border-dark-teal/15 bg-off-white px-4 py-3 cursor-pointer transition-colors hover:border-dark-teal/30 has-[:checked]:border-lime-dark has-[:checked]:bg-lime/15;
+  }
+  .field-error {
+    @apply text-red-600 text-xs mt-1.5;
+  }
+  .input-error {
+    @apply border-red-500 focus:border-red-500 focus:ring-red-200;
+  }
+  .radio-error-legend {
+    @apply text-red-600;
+  }
+
+  /* ==========================================================================
+     BLOCO 2 — Chrome do proprio gerador (nao vai pro codigo exportado)
+     ========================================================================== */
+  .painel {
+    @apply bg-white rounded-2xl border border-dark-teal/10 shadow-sm;
+  }
+  .painel-titulo {
+    @apply flex items-center gap-2 px-4 py-3 border-b border-dark-teal/10 text-sm font-bold text-dark-teal;
+  }
+  .campo-builder {
+    @apply block text-[11px] font-semibold uppercase tracking-[0.12em] text-dark-teal/50 mb-1.5;
+  }
+  .input-builder {
+    @apply w-full rounded-lg border border-dark-teal/15 bg-off-white px-3 py-2 text-sm text-dark-teal placeholder:text-dark-teal/30 outline-none transition-colors focus:border-lime-dark focus:ring-2 focus:ring-lime/30;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-dark-teal/60 transition-colors hover:bg-dark-teal/5 hover:text-dark-teal disabled:opacity-30 disabled:hover:bg-transparent;
+  }
+  .btn-acao {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-dark-teal px-3.5 py-2 text-xs font-semibold text-off-white transition-colors hover:bg-dark-teal-light disabled:opacity-40;
+  }
+  .btn-acao-lime {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-lime px-3.5 py-2 text-xs font-bold text-dark-teal transition-colors hover:bg-lime-dark;
+  }
+  .chip {
+    @apply inline-flex cursor-pointer select-none items-center gap-1.5 rounded-full border border-dark-teal/15 bg-off-white px-3 py-1.5 text-xs font-semibold text-dark-teal/60 transition-colors hover:border-dark-teal/30;
+  }
+  .chip-on {
+    @apply border-lime-dark bg-lime/25 text-dark-teal;
+  }
+  .aba {
+    @apply px-3 py-2 text-xs font-semibold rounded-lg transition-colors text-dark-teal/50 hover:text-dark-teal hover:bg-dark-teal/5;
+  }
+  .aba-on {
+    @apply bg-dark-teal text-off-white hover:bg-dark-teal hover:text-off-white;
+  }
+}
+
+/* Codigo gerado: bloco de leitura */
+.codigo {
+  @apply font-mono text-[12px] leading-relaxed;
+  tab-size: 2;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #09282b40;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #09282b80;
+}
