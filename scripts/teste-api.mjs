@@ -121,6 +121,150 @@ await teste('publicacao boa faz upsert por slug e devolve a URL', async () => {
   assert.ok(ultimoFetch.opts.headers.Prefer.includes('merge-duplicates'))
 })
 
+// ---------------------------------------------------------------------------
+// /api/save-lead — o caminho do lead ate o Bitrix.
+//
+// O erro que este bloco existe pra impedir: mandar o negocio pra etapa errada.
+// Neste portal os IDs padrao foram reaproveitados fora de ordem — C25:NEW e
+// "Ajuste", nao "Novo lead". Um negocio criado em C25:NEW nao da erro nenhum:
+// so cai numa coluna que ninguem olha, e o lead da live morre ali.
+// ---------------------------------------------------------------------------
+const { default: saveLead } = await import('../api/save-lead.mjs')
+const { verificarBitrix } = await import('../api/_bitrix.mjs')
+
+const BITRIX = 'https://portal.bitrix24.com.br/rest/1/token'
+
+/** Stub do Bitrix: registra as chamadas e responde conforme o roteiro. */
+function stubBitrix(roteiro = {}) {
+  const chamadas = []
+  globalThis.fetch = async (url, opts) => {
+    const metodo = String(url).split('/').pop().replace('.json', '')
+    const corpo = JSON.parse(opts.body || '{}')
+    chamadas.push({ metodo, corpo, url: String(url) })
+    if (metodo in roteiro) return roteiro[metodo]
+    // Supabase (tabela de pendentes) cai aqui.
+    if (String(url).includes('/rest/v1/')) return { ok: true, status: 201, text: async () => '' }
+    return { ok: true, status: 200, json: async () => ({ result: 999 }) }
+  }
+  return chamadas
+}
+
+const jsonOk = (result) => ({ ok: true, status: 200, json: async () => ({ result }) })
+const jsonErro = (error, descricao) => ({
+  ok: true, status: 200,
+  json: async () => ({ error, error_description: descricao }),
+})
+
+const leadBom = () => ({
+  method: 'POST',
+  headers: {},
+  body: {
+    lead_id: 'lead_teste_1',
+    slug: 'exemplo',
+    form_name: 'exemplo-2026',
+    nome: 'Bruno Oliveira',
+    email: 'BRUNO@Exemplo.com ',
+    whatsapp: '(11) 98765-4321',
+    assistiu_live: 'Sim, eu assisti tudo',
+    utm_source: 'instagram',
+  },
+})
+
+await teste('lead vai pro Bitrix na etapa CERTA, nao em C25:NEW', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  delete process.env.BITRIX_CATEGORY_ID
+  delete process.env.BITRIX_STAGE_ID
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const r = resFalso()
+  await saveLead(leadBom(), r)
+  assert.equal(r._status, 200, JSON.stringify(r._json))
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  assert.ok(deal, 'nao criou negocio')
+  assert.equal(deal.corpo.fields.CATEGORY_ID, '25')
+  assert.equal(deal.corpo.fields.STAGE_ID, 'C25:PREPAYMENT_INVOIC')
+  assert.notEqual(deal.corpo.fields.STAGE_ID, 'C25:NEW', 'C25:NEW e "Ajuste", nao Novo lead')
+  assert.equal(deal.corpo.fields.CONTACT_ID, 77, 'negocio tem que apontar pro contato criado')
+})
+
+await teste('WhatsApp e e-mail chegam normalizados no contato', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const r = resFalso()
+  await saveLead(leadBom(), r)
+  const contato = chamadas.find((c) => c.metodo === 'crm.contact.add')
+  assert.equal(contato.corpo.fields.PHONE[0].VALUE, '+5511987654321')
+  assert.equal(contato.corpo.fields.EMAIL[0].VALUE, 'bruno@exemplo.com')
+})
+
+await teste('resposta da live vira observacao no negocio', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const r = resFalso()
+  await saveLead(leadBom(), r)
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  assert.ok(deal.corpo.fields.COMMENTS.includes('assistiu_live'))
+  assert.ok(deal.corpo.fields.COMMENTS.includes('utm_source=instagram'))
+})
+
+await teste('Bitrix recusando, o lead e GUARDADO em vez de sumir', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  process.env.SUPABASE_FORMS_URL = 'https://exemplo.supabase.co'
+  process.env.SUPABASE_FORMS_KEY = 'chave'
+  const chamadas = stubBitrix({
+    'crm.contact.add': jsonErro('insufficient_scope', 'sem escopo CRM'),
+  })
+  const r = resFalso()
+  await saveLead(leadBom(), r)
+  const guardou = chamadas.find((c) => c.url.includes('stfv_leads_pendentes'))
+  assert.ok(guardou, 'lead recusado tem que ir pra tabela de pendentes')
+  assert.ok(/insufficient_scope/.test(guardou.corpo.motivo), 'motivo devia registrar o erro')
+  assert.equal(r._status, 200, 'guardado com sucesso = 200')
+})
+
+await teste('sem Bitrix E sem onde guardar, devolve erro (nao finge sucesso)', async () => {
+  delete process.env.BITRIX_WEBHOOK_URL
+  delete process.env.SUPABASE_FORMS_URL
+  delete process.env.SUPABASE_FORMS_KEY
+  stubBitrix()
+  const r = resFalso()
+  await saveLead(leadBom(), r)
+  assert.equal(r._status, 502)
+  assert.equal(r._json.ok, false)
+})
+
+await teste('nome curto demais e recusado no servidor', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  stubBitrix()
+  const r = resFalso()
+  const req = leadBom()
+  req.body.nome = 'B'
+  await saveLead(req, r)
+  assert.equal(r._status, 400)
+  assert.equal(r._json.error, 'nome_invalido')
+})
+
+await teste('webhook sem escopo CRM e detectado pelo diagnostico', async () => {
+  // A pegadinha: profile.json responde normal e todo crm.* falha.
+  stubBitrix({ profile: jsonOk({ NAME: 'Bruno' }), scope: jsonOk(['']) })
+  const diag = await verificarBitrix(BITRIX)
+  assert.equal(diag.ok, false)
+  assert.equal(diag.erro, 'sem_escopo_crm')
+})
+
+await teste('webhook com escopo CRM passa no diagnostico', async () => {
+  stubBitrix({
+    profile: jsonOk({ NAME: 'Bruno', LAST_NAME: 'Oliveira' }),
+    scope: jsonOk(['crm', 'user']),
+    'crm.dealcategory.stage.list': jsonOk([
+      { STATUS_ID: 'C25:PREPAYMENT_INVOIC', NAME: 'Novo Lead - Aguardando resposta' },
+      { STATUS_ID: 'C25:NEW', NAME: 'Ajuste' },
+    ]),
+  })
+  const diag = await verificarBitrix(BITRIX)
+  assert.equal(diag.ok, true)
+  assert.ok(diag.etapas.some((e) => e.id === 'C25:PREPAYMENT_INVOIC'))
+})
+
 let falhas = 0
 for (const [st, nome] of casos) {
   if (st !== 'ok') falhas++
@@ -130,4 +274,4 @@ if (falhas) {
   console.error(`\n${falhas} teste(s) da API falharam.`)
   process.exit(1)
 }
-console.log('OK: /api/publicar recusa o que tem que recusar')
+console.log('OK: /api/publicar e /api/save-lead recusam o que tem que recusar')

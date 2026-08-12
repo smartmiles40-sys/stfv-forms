@@ -48,12 +48,35 @@ use **Exportar** / **Importar** (JSON).
 ### Fluxo do lead
 
 ```
-Formulário  →  POST /api/save-lead  →  ┬→  webhook n8n  →  Bitrix24 (contato + deal)
-                                        └→  Supabase site_leads  (ledger anti-perda)
+Formulário  →  POST /api/save-lead  →  Bitrix24  (crm.contact.add + crm.deal.add)
+                                          │
+                                          └─ recusou? →  stfv_leads_pendentes
 ```
 
-Os dois canais correm em paralelo (`Promise.allSettled`): se o n8n cair, o lead ainda fica
-gravado no ledger e a conciliação recupera depois.
+**Sem n8n no meio.** O n8n era um intermediário; numa live, cada peça a mais é mais uma coisa
+que pode cair. A função fala direto com o Bitrix por webhook de entrada.
+
+Se o Bitrix recusar, o lead **não some**: vai pra `stfv_leads_pendentes` com o motivo do erro,
+e o formulário redireciona a pessoa pro destino assim mesmo — quem chega no seu WhatsApp já
+está capturado pelo próprio número.
+
+### Duas armadilhas do Bitrix que o código já trata
+
+**A etapa certa.** Neste portal os IDs padrão foram reaproveitados fora de ordem:
+`C25:NEW` é **"Ajuste"**, não "Novo lead". A primeira coluna do funil 25 é
+`C25:PREPAYMENT_INVOIC`. Criar o negócio na etapa errada **não dá erro nenhum** — o lead só
+cai numa coluna que ninguém olha. Há teste travando isso.
+
+**O escopo do webhook.** Webhook de entrada criado sem escopo CRM responde `profile.json`
+normalmente e falha em **todo** `crm.*` com `insufficient_scope`. Ou seja: "o webhook
+responde" não prova nada. Use o diagnóstico antes da live:
+
+```
+GET /api/bitrix-status?senha=<PUBLICAR_SENHA>
+```
+
+Ele mostra o escopo real, lista as etapas do funil e diz **o nome da coluna** onde o lead vai
+cair — que é a única forma de confirmar que é a coluna certa.
 
 ---
 
@@ -170,12 +193,15 @@ Padrão de deploy isolado da agência: um repositório, um project na Vercel.
 
 | Variável | Para quê | Sem ela |
 |---|---|---|
-| `PUBLICAR_SENHA` | libera a aba **Publicar** | a rota responde 503 (fecha) |
-| `SUPABASE_FORMS_URL` | projeto com `stfv_forms_publicados` | não publica nem serve |
-| `SUPABASE_FORMS_KEY` | `service_role` (a tabela tem RLS ligado) | idem |
-| `WEBHOOK_<SLUG>` | webhook do n8n daquele formulário | lead não chega no Bitrix |
-| `SUPABASE_LEADS_URL` | ledger anti-perda de lead | lead fica só nos logs |
-| `SUPABASE_LEADS_KEY` | `service_role` do projeto do ledger | idem |
+| `BITRIX_WEBHOOK_URL` | `https://<portal>.bitrix24.com.br/rest/<id>/<token>/` | lead não chega no CRM |
+| `PUBLICAR_SENHA` | libera a aba **Publicar** e o diagnóstico | as rotas respondem 503 (fecham) |
+| `SUPABASE_FORMS_URL` | projeto com as tabelas do app | não publica, não serve, não guarda pendente |
+| `SUPABASE_FORMS_KEY` | `service_role` (as tabelas têm RLS ligado) | idem |
+| `BITRIX_CATEGORY_ID` | opcional — funil; padrão `25` | usa o padrão |
+| `BITRIX_STAGE_ID` | opcional — etapa; padrão `C25:PREPAYMENT_INVOIC` | usa o padrão |
+
+O Supabase aqui **não recebe lead no caminho normal** — ele guarda a página do formulário
+publicado e, só quando o Bitrix recusa, o lead que precisa ser recuperado.
 
 Depois disso, push na `main` publica sozinho.
 

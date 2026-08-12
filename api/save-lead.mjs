@@ -1,25 +1,29 @@
 //  /api/save-lead — backend COMPARTILHADO dos formulários hospedados aqui.
 //
-//  Diferença pro save-lead.mjs que o gerador exporta: aquele é de UM formulário,
-//  pra colar no repositório de UMA LP. Este atende todos os formulários que
-//  moram em public/f/ deste projeto, roteando pelo `slug` que vem no payload.
-//  Por isso ele é mantido à mão — o gerador não sabe quantos forms vivem aqui.
+//  Caminho do lead: formulário → esta função → Bitrix24 (contato + negócio).
+//  Sem n8n no meio: o n8n era um intermediário, e numa live cada peça a mais é
+//  mais uma coisa que pode cair.
 //
-//  Não precisa de dependência nenhuma (fetch nativo do Node 18+).
+//  Se o Bitrix recusar, o lead NÃO se perde: vai pra tabela stfv_leads_pendentes
+//  e pros logs da função, pra ser recuperado depois. E o formulário redireciona
+//  o lead pro destino de qualquer jeito — quem chega no WhatsApp já está
+//  capturado pelo próprio número.
 //
 //  Env vars (Vercel → Settings → Environment Variables):
-//    WEBHOOK_<SLUG>       webhook do n8n daquele formulário (ex.: WEBHOOK_LIVE)
-//    WEBHOOK_URL          (opcional) força um webhook único pra todos — só debug
-//    SUPABASE_LEADS_URL   (opcional) ledger anti-perda de lead
-//    SUPABASE_LEADS_KEY   (opcional) service_role do mesmo projeto
-//
-//  Sem webhook configurado o lead NÃO se perde: ele continua indo pro ledger e
-//  pros logs da função. Mas também não chega no Bitrix — configure antes da live.
+//    BITRIX_WEBHOOK_URL    obrigatória — https://<portal>.bitrix24.com.br/rest/<id>/<token>/
+//    BITRIX_CATEGORY_ID    (opcional) funil; padrão 25
+//    BITRIX_STAGE_ID       (opcional) etapa; padrão C25:PREPAYMENT_INVOIC
+//    SUPABASE_FORMS_URL    (opcional) guarda lead que o Bitrix recusou
+//    SUPABASE_FORMS_KEY    (opcional) service_role do mesmo projeto
+
+import { criarLead, FUNIL_PADRAO } from './_bitrix.mjs'
+
+const TABELA_PENDENTES = 'stfv_leads_pendentes'
 
 /**
  * Um registro por formulário hospedado. `campos` é allowlist: só o que este
  * formulário manda entra no lead, o resto do body é descartado. Evita
- * mass-assignment e mantém webhook e logs limpos.
+ * mass-assignment e mantém o negócio do Bitrix limpo.
  */
 const FORMS = {
   exemplo: {
@@ -31,12 +35,6 @@ const TRACK_KEYS = [
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
   'utm_id', 'gclid', 'fbclid', 'gbraid', 'wbraid',
 ]
-
-/** Webhook do slug: env var própria primeiro, depois a global de debug. */
-function webhookDoSlug(slug) {
-  const chave = `WEBHOOK_${String(slug).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`
-  return process.env[chave] || process.env.WEBHOOK_URL || ''
-}
 
 /** Payload/CRM sempre recebem +55 + dígitos (ex.: +5542984265706). */
 function normalizarWhatsapp(valor) {
@@ -54,6 +52,54 @@ function dataHoraSaoPaulo() {
   return f.format(new Date()).replace(',', '')
 }
 
+/**
+ * Rede de segurança: lead que o Bitrix recusou fica gravado pra recuperação.
+ * Chave é o lead_id, então reenvio do mesmo lead atualiza em vez de duplicar.
+ * Devolve true se conseguiu guardar.
+ */
+async function guardarPendente(lead, motivo) {
+  const SB_URL = process.env.SUPABASE_FORMS_URL
+  const SB_KEY = process.env.SUPABASE_FORMS_KEY
+  if (!SB_URL || !SB_KEY) return false
+
+  const ctrl = new AbortController()
+  const timeout = setTimeout(() => ctrl.abort(), 7000)
+  try {
+    const resp = await fetch(
+      `${SB_URL.replace(/\/$/, '')}/rest/v1/${TABELA_PENDENTES}?on_conflict=lead_id`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: SB_KEY,
+          Authorization: `Bearer ${SB_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({
+          lead_id: lead.lead_id,
+          slug: lead.slug || '',
+          nome: lead.nome || '',
+          whatsapp: lead.whatsapp || '',
+          email: lead.email || '',
+          motivo: String(motivo).slice(0, 300),
+          lead,
+        }),
+        signal: ctrl.signal,
+      },
+    )
+    if (!resp.ok) {
+      console.error('[pendente] supabase', resp.status, await resp.text().catch(() => ''))
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error('[pendente] falhou:', e?.message)
+    return false
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ ok: false, error: 'method_not_allowed' })
@@ -65,9 +111,8 @@ export default async function handler(req, res) {
 
   const slug = str(body.slug, 40)
   const conf = FORMS[slug]
-  // Slug desconhecido não é motivo pra descartar o lead: ele segue pro ledger e
-  // pros logs com slug_ok=false, e a conciliação resolve depois. Perder lead por
-  // erro de configuração nosso é o pior desfecho possível.
+  // Slug desconhecido não é motivo pra descartar o lead: ele segue com os campos
+  // básicos. Perder lead por erro de configuração nosso é o pior desfecho.
   const campos = conf ? conf.campos : ['nome', 'email', 'whatsapp']
 
   const lead = {
@@ -96,86 +141,36 @@ export default async function handler(req, res) {
     return
   }
 
-  // Rede de segurança: todo lead fica nos logs da função.
+  // Rede de segurança: todo lead fica nos logs da função, aconteça o que
+  // acontecer depois.
   console.log('[lead]', JSON.stringify(lead))
 
-  const webhookUrl = webhookDoSlug(slug)
-  const slugOk = Boolean(conf && webhookUrl)
-
-  // ── Canal 1: webhook do n8n ───────────────────────────────────────────
-  const enviarN8n = async () => {
-    if (!webhookUrl) {
-      console.warn(`[webhook] sem destino para slug="${slug}" — coberto pelo ledger`)
-      return
-    }
-    const ctrl = new AbortController()
-    const timeout = setTimeout(() => ctrl.abort(), 7000)
-    try {
-      const resp = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lead),
-        signal: ctrl.signal,
-      })
-      if (!resp.ok) console.error('[webhook] status', resp.status)
-    } finally {
-      clearTimeout(timeout)
-    }
+  const base = process.env.BITRIX_WEBHOOK_URL
+  if (!base) {
+    console.error('[bitrix] BITRIX_WEBHOOK_URL ausente — lead não foi pro CRM')
+    const guardado = await guardarPendente(lead, 'BITRIX_WEBHOOK_URL ausente')
+    res.status(guardado ? 200 : 502).json({ ok: guardado, error: 'bitrix_nao_configurado' })
+    return
   }
 
-  // ── Canal 2: ledger no Supabase (independe do n8n) ────────────────────
-  // Captura 100% dos leads — inclusive se o n8n estiver fora do ar. Falha aqui
-  // NUNCA trava o usuário nem perde o lead: só vira log.
-  const gravarLedger = async () => {
-    const SB_URL = process.env.SUPABASE_LEADS_URL
-    const SB_KEY = process.env.SUPABASE_LEADS_KEY
-    if (!SB_URL || !SB_KEY) {
-      console.warn('[ledger] SUPABASE_LEADS_URL/KEY ausentes — lead só no n8n/logs')
-      return
-    }
-    const ctrl = new AbortController()
-    const timeout = setTimeout(() => ctrl.abort(), 7000)
-    try {
-      const resp = await fetch(`${SB_URL.replace(/\/$/, '')}/rest/v1/site_leads`, {
-        method: 'POST',
-        headers: {
-          apikey: SB_KEY,
-          Authorization: `Bearer ${SB_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
-        body: JSON.stringify({
-          lead_id: lead.lead_id,
-          site: 'stfv-forms',
-          slug: lead.slug,
-          slug_ok: slugOk,
-          form_name: lead.form_name || '',
-          nome: lead.nome || '',
-          whatsapp: lead.whatsapp || '',
-          email: lead.email || '',
-          instagram: lead.instagram || '',
-          expedicao: lead.expedicao || '',
-          fonte: lead.fonte || '',
-          source_id: lead.source_id || '',
-          data_hora_cadastro: lead.data_hora_cadastro || '',
-          raw: lead,
-        }),
-        signal: ctrl.signal,
-      })
-      // 409 = lead_id repetido (re-submit) = já capturado, não é erro.
-      if (!resp.ok && resp.status !== 409) {
-        const txt = await resp.text().catch(() => '')
-        console.error('[ledger] status', resp.status, txt)
-      }
-    } finally {
-      clearTimeout(timeout)
-    }
+  const resultado = await criarLead(base, lead, {
+    categoryId: process.env.BITRIX_CATEGORY_ID || FUNIL_PADRAO.categoryId,
+    stageId: process.env.BITRIX_STAGE_ID || FUNIL_PADRAO.stageId,
+    // Tudo que não é campo de contato vira observação no negócio.
+    camposExtras: campos.filter((c) => !['nome', 'email', 'whatsapp'].includes(c)),
+  })
+
+  if (resultado.ok) {
+    res.status(200).json({ ok: true, negocio: resultado.negocioId })
+    return
   }
 
-  // Os dois canais correm em PARALELO: nenhum atrasa o outro.
-  const [rN8n, rLedger] = await Promise.allSettled([enviarN8n(), gravarLedger()])
-  if (rN8n.status === 'rejected') console.error('[webhook] falhou:', rN8n.reason?.message)
-  if (rLedger.status === 'rejected') console.error('[ledger] falhou:', rLedger.reason?.message)
+  const motivo = `${resultado.etapa}: ${resultado.erro} ${resultado.descricao ?? ''}`.trim()
+  console.error('[bitrix] falhou —', motivo)
 
-  res.status(200).json({ ok: true })
+  // 200 só quando o lead está guardado em algum lugar recuperável. Se nem isso
+  // deu, devolvemos erro: aí o formulário reenvia por sendBeacon e redireciona
+  // o lead assim mesmo, que é o desfecho menos ruim.
+  const guardado = await guardarPendente(lead, motivo)
+  res.status(guardado ? 200 : 502).json({ ok: guardado, error: 'bitrix_recusou' })
 }
