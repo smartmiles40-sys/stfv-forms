@@ -162,6 +162,24 @@ acrescente um caso que passe por ele — um `if` sem caso correspondente não é
 
 ---
 
+## Página inicial
+
+O painel abre numa lista do que existe, separada em duas de propósito:
+
+- **No ar** — formulários publicados, vindos do servidor. Cada um traz o link, botão de copiar,
+  abrir e **editar** (o `spec` mora no banco, então dá pra continuar de outro computador).
+- **Rascunhos neste computador** — ficam no `localStorage` do navegador. Ninguém acessa por
+  link enquanto você não publicar.
+
+Confundir as duas é caro: rascunho parece pronto e não está no ar; publicado parece sumido
+quando você abre o painel de outra máquina. Por isso são listas separadas, e um rascunho cujo
+endereço já foi publicado ganha a marca "já publicado".
+
+A lista pede a senha de publicação — ela revela quais formulários existem, e o `spec` traz
+número de WhatsApp e regras de saída.
+
+---
+
 ## Publicar e pegar o link
 
 Monte o formulário, vá na aba **Publicar**, digite a senha e clique. Você recebe o endereço

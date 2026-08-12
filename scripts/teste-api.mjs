@@ -122,6 +122,58 @@ await teste('publicacao boa faz upsert por slug e devolve a URL', async () => {
 })
 
 // ---------------------------------------------------------------------------
+// /api/forms — a lista da pagina inicial.
+//
+// Ela revela quais formularios existem, e o spec traz numero de WhatsApp e
+// regras de saida. Tem que exigir senha e fechar quando nao configurada, igual
+// ao /api/publicar.
+// ---------------------------------------------------------------------------
+const { default: listarForms } = await import('../api/forms.mjs')
+
+const get = (query = {}, senha = 'senha-certa') => ({
+  method: 'GET',
+  headers: { 'x-stfv-senha': senha },
+  query,
+})
+
+await teste('/api/forms recusa POST', async () => {
+  envLimpo()
+  const r = resFalso()
+  await listarForms({ method: 'POST', headers: {}, query: {} }, r)
+  assert.equal(r._status, 405)
+})
+
+await teste('/api/forms sem senha configurada FECHA', async () => {
+  envLimpo()
+  delete process.env.PUBLICAR_SENHA
+  const r = resFalso()
+  await listarForms(get({}, ''), r)
+  assert.equal(r._status, 503)
+})
+
+await teste('/api/forms com senha errada da 401', async () => {
+  envLimpo()
+  const r = resFalso()
+  await listarForms(get({}, 'chute'), r)
+  assert.equal(r._status, 401)
+})
+
+await teste('/api/forms nao devolve a coluna html na listagem', async () => {
+  // 28 KB por formulario que ninguem usa pra montar a lista.
+  envLimpo()
+  let urlPedida = ''
+  globalThis.fetch = async (url) => {
+    urlPedida = String(url)
+    return { ok: true, status: 200, json: async () => [] }
+  }
+  const r = resFalso()
+  await listarForms(get(), r)
+  assert.equal(r._status, 200)
+  assert.ok(!/select=[^&]*html/.test(urlPedida), `pediu html a toa: ${urlPedida}`)
+  assert.ok(/order=atualizado_em\.desc/.test(urlPedida), 'mais recente primeiro')
+})
+
+// ---------------------------------------------------------------------------
 // /api/save-lead — o caminho do lead ate o Bitrix.
 //
 // O erro que este bloco existe pra impedir: mandar o negocio pra etapa errada.

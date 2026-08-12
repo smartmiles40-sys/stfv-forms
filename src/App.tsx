@@ -7,6 +7,7 @@ import {
   FileDown,
   FilePlus2,
   FileUp,
+  LayoutGrid,
   Monitor,
   Save,
   Smartphone,
@@ -19,6 +20,7 @@ import FormRenderer from './components/FormRenderer'
 import PainelCampos from './components/PainelCampos'
 import PainelTracking from './components/PainelTracking'
 import PainelExportar from './components/PainelExportar'
+import PaginaInicial from './components/PaginaInicial'
 import { apagarForm, listarForms, lerUltimoId, marcarAberto, salvarForm } from './lib/storage'
 import { baixarArquivo, uid } from './lib/util'
 
@@ -32,6 +34,8 @@ import { baixarArquivo, uid } from './lib/util'
 
 type Painel = 'estrutura' | 'tracking'
 type Vista = 'preview' | 'codigo'
+/** A pagina inicial e a entrada: primeiro voce ve o que existe, depois edita. */
+type Tela = 'inicio' | 'editor'
 
 export default function App() {
   const [spec, setSpec] = useState<FormSpec>(() => {
@@ -39,6 +43,7 @@ export default function App() {
     const ultimo = lerUltimoId()
     return salvos.find((f) => f.id === ultimo) ?? salvos[0] ?? presetExpedicao()
   })
+  const [tela, setTela] = useState<Tela>('inicio')
   const [painel, setPainel] = useState<Painel>('estrutura')
   const [vista, setVista] = useState<Vista>('preview')
   const [etapaAtiva, setEtapaAtiva] = useState(0)
@@ -69,6 +74,7 @@ export default function App() {
     setSpec(alvo)
     marcarAberto(id)
     setEtapaAtiva(0)
+    setTela('editor')
   }, [])
 
   const novo = useCallback((criar: () => FormSpec) => {
@@ -77,6 +83,26 @@ export default function App() {
     salvarForm(s)
     setLista(listarForms())
     setEtapaAtiva(0)
+    setTela('editor')
+  }, [])
+
+  /**
+   * Traz um formulario PUBLICADO de volta pro editor. Como o spec fica no
+   * servidor, da pra continuar de outro computador — e por isso ele vira
+   * rascunho local aqui, senao a edicao se perderia ao fechar a aba.
+   */
+  const editarPublicado = useCallback((doServidor: FormSpec) => {
+    salvarForm(doServidor)
+    marcarAberto(doServidor.id)
+    setSpec(doServidor)
+    setLista(listarForms())
+    setEtapaAtiva(0)
+    setTela('editor')
+  }, [])
+
+  const apagarRascunho = useCallback((id: string) => {
+    apagarForm(id)
+    setLista(listarForms())
   }, [])
 
   const importar = useCallback((arquivo: File) => {
@@ -104,34 +130,51 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden bg-off-white">
       {/* ==== Barra superior ==== */}
       <header className="flex flex-shrink-0 items-center gap-3 border-b border-dark-teal/10 bg-white px-4 py-2.5">
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="flex items-center gap-2 rounded-lg px-1 py-0.5 transition-colors hover:bg-dark-teal/5"
+          onClick={() => setTela('inicio')}
+          title="Ver todos os formulários"
+        >
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-dark-teal text-[11px] font-black text-lime">
             SF
           </span>
           <span className="text-sm font-bold">Gerador de Formulários</span>
-        </div>
+        </button>
 
-        <input
-          className="input-builder ml-2 !w-56"
-          value={spec.nome}
-          onChange={(e) => setSpec({ ...spec, nome: e.target.value })}
-          placeholder="Nome do formulário"
-        />
+        {tela === 'editor' && (
+          <button type="button" className="btn-ghost" onClick={() => setTela('inicio')}>
+            <LayoutGrid className="h-3.5 w-3.5" /> Meus formulários
+          </button>
+        )}
 
-        <select
-          className="input-builder !w-44 text-xs"
-          value={spec.id}
-          onChange={(e) => abrir(e.target.value)}
-        >
-          {lista.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.nome}
-            </option>
-          ))}
-          {!lista.some((f) => f.id === spec.id) && <option value={spec.id}>{spec.nome}</option>}
-        </select>
+        {tela === 'editor' && (
+          <>
+            <input
+              className="input-builder ml-2 !w-56"
+              value={spec.nome}
+              onChange={(e) => setSpec({ ...spec, nome: e.target.value })}
+              placeholder="Nome do formulário"
+            />
 
-        <div className="ml-auto flex items-center gap-1.5">
+            <select
+              className="input-builder !w-44 text-xs"
+              value={spec.id}
+              onChange={(e) => abrir(e.target.value)}
+            >
+              {lista.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+              {!lista.some((f) => f.id === spec.id) && (
+                <option value={spec.id}>{spec.nome}</option>
+              )}
+            </select>
+          </>
+        )}
+
+        <div className={`ml-auto flex items-center gap-1.5 ${tela === 'inicio' ? 'hidden' : ''}`}>
           <select
             className="input-builder !w-auto text-xs"
             value=""
@@ -204,6 +247,15 @@ export default function App() {
         </div>
       </header>
 
+      {tela === 'inicio' ? (
+        <PaginaInicial
+          rascunhos={lista}
+          onAbrirRascunho={abrir}
+          onApagarRascunho={apagarRascunho}
+          onNovo={novo}
+          onEditarPublicado={editarPublicado}
+        />
+      ) : (
       <div className="flex min-h-0 flex-1">
         {/* ==== Coluna esquerda: configuração ==== */}
         <aside className="flex w-[400px] flex-shrink-0 flex-col border-r border-dark-teal/10 bg-off-white">
@@ -317,6 +369,7 @@ export default function App() {
           )}
         </main>
       </div>
+      )}
     </div>
   )
 }
