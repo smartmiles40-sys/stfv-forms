@@ -9,3 +9,6 @@ dist-ssr
 .amostra
 .amostra-runner.mjs
 .gerador-check.mjs
+
+# rascunhos de uma sessão (publicar um form na mão, gerar spec, etc.)
+.tmp-*
