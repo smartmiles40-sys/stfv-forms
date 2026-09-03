@@ -41,6 +41,7 @@ const FORMS = {
   islandia: { campos: CAMPOS_LIVE },
   japao: { campos: CAMPOS_LIVE },
   egito: { campos: CAMPOS_LIVE },
+  peru: { campos: CAMPOS_LIVE },
   live: { campos: CAMPOS_LIVE },
   exemplo: { campos: CAMPOS_LIVE },
 }
