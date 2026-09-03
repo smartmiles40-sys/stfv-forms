@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Live Costa Amalfitana — captação</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+body { margin: 0; background: #F8F6F7; padding: 2rem 1rem; }
+.stfv-wrap { max-width: 42rem; margin: 0 auto; }
+/* ==========================================================================
+   Formulário — identidade Se Tu For, Eu Vou! Viagens
+   CSS puro (sem Tailwind). Cole junto com o HTML do formulário.
+   ========================================================================== */
+
+.stfv-form {
+  --dark-teal: #09282B;
+  --lime: #D7F264;
+  --lime-dark: #C0E046;
+  --off-white: #F8F6F7;
+  --soft-green: #EDF5DC;
+
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--dark-teal);
+  background: #fff;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 8px 30px rgba(9, 40, 43, 0.08);
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+@media (min-width: 768px) {
+  .stfv-form { padding: 2rem; }
+}
+.stfv-form *, .stfv-form *::before, .stfv-form *::after { box-sizing: border-box; }
+.stfv-form fieldset { border: 0; margin: 0; padding: 0; }
+
+/* ---- Indicador de etapas ---- */
+.stfv-steps {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0.75rem; margin-bottom: 2rem;
+}
+.stfv-step-dot {
+  width: 2rem; height: 2rem; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.875rem; font-weight: 700;
+  background: rgba(9, 40, 43, 0.1); color: rgba(9, 40, 43, 0.5);
+  transition: background-color .2s, color .2s;
+}
+.stfv-step-dot.is-ativo { background: var(--lime); color: var(--dark-teal); }
+.stfv-step-dot.is-passado { background: var(--dark-teal); color: var(--off-white); }
+.stfv-step-linha { width: 2.5rem; height: 2px; background: rgba(9, 40, 43, 0.2); }
+
+/* ---- Campos ---- */
+.stfv-etapa-rotulo {
+  display: block; text-align: center; margin-bottom: 1.5rem;
+  font-size: 0.875rem; font-weight: 600; color: rgba(9, 40, 43, 0.6);
+}
+.stfv-campos { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+@media (min-width: 640px) {
+  .stfv-campos { grid-template-columns: 1fr 1fr; }
+  .stfv-campo { grid-column: span 2; }
+  .stfv-campo.is-metade { grid-column: span 1; }
+}
+.stfv-label {
+  display: block; font-size: 0.875rem; font-weight: 600;
+  color: var(--dark-teal); margin-bottom: 0.5rem;
+}
+.stfv-label .stfv-opcional { font-weight: 400; color: rgba(9, 40, 43, 0.4); margin-left: 0.25rem; }
+.stfv-input {
+  width: 100%; border-radius: 0.75rem;
+  border: 1px solid rgba(9, 40, 43, 0.15);
+  background: var(--off-white);
+  padding: 0.875rem 1rem;
+  color: var(--dark-teal);
+  font-family: inherit; font-size: 1rem;
+  outline: none; transition: border-color .2s, box-shadow .2s;
+}
+.stfv-input::placeholder { color: rgba(9, 40, 43, 0.35); }
+.stfv-input:focus {
+  border-color: var(--lime-dark);
+  box-shadow: 0 0 0 2px rgba(215, 242, 100, 0.4);
+}
+.stfv-input.is-erro { border-color: #ef4444; }
+.stfv-input.is-erro:focus { border-color: #ef4444; box-shadow: 0 0 0 2px #fecaca; }
+textarea.stfv-input { resize: vertical; min-height: 7rem; }
+
+.stfv-ajuda { font-size: 0.75rem; color: rgba(9, 40, 43, 0.5); margin: 0.375rem 0 0; }
+.stfv-erro { font-size: 0.75rem; color: #dc2626; margin: 0.375rem 0 0; }
+.stfv-legend.is-erro { color: #dc2626; }
+
+/* ---- Escolhas ---- */
+.stfv-opcoes { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+.stfv-opcao {
+  display: flex; align-items: center; gap: 0.75rem;
+  border-radius: 0.75rem; border: 1px solid rgba(9, 40, 43, 0.15);
+  background: var(--off-white); padding: 0.75rem 1rem;
+  cursor: pointer; transition: border-color .2s, background-color .2s;
+}
+.stfv-opcao:hover { border-color: rgba(9, 40, 43, 0.3); }
+.stfv-opcao:has(input:checked) { border-color: var(--lime-dark); background: rgba(215, 242, 100, 0.15); }
+.stfv-opcao input { width: 1rem; height: 1rem; accent-color: var(--lime); margin: 0; }
+
+/* ---- Botoes ---- */
+.stfv-acoes { display: flex; flex-direction: column-reverse; gap: 0.75rem; margin-top: 2rem; }
+@media (min-width: 640px) { .stfv-acoes { flex-direction: row; } }
+.stfv-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 1rem 2rem; border-radius: 999px; border: 0;
+  font-family: inherit; font-size: 1rem; font-weight: 600;
+  cursor: pointer; transition: all .3s;
+}
+.stfv-btn-primary { background: var(--lime); color: var(--dark-teal); }
+.stfv-btn-primary:hover:not(:disabled) {
+  background: var(--lime-dark);
+  box-shadow: 0 12px 40px -8px rgba(215, 242, 100, 0.4);
+  transform: scale(1.02);
+}
+.stfv-btn-primary:active:not(:disabled) { transform: scale(0.98); }
+.stfv-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.stfv-btn-outline {
+  background: transparent; color: var(--dark-teal);
+  border: 2px solid rgba(9, 40, 43, 0.2);
+}
+.stfv-btn-outline:hover { border-color: var(--dark-teal); background: rgba(9, 40, 43, 0.05); }
+@media (min-width: 640px) {
+  .stfv-acoes .stfv-btn-outline { width: 33.333%; }
+  .stfv-acoes .stfv-btn-primary { flex: 1; }
+}
+
+/* ---- Etapa de vídeo ---- */
+.stfv-video { margin-bottom: 1.5rem; }
+.stfv-video iframe, .stfv-video video { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 0.75rem; }
+.stfv-aviso {
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  border-radius: 0.75rem; padding: 0.75rem 1rem; font-size: 0.875rem;
+  background: rgba(237, 245, 220, 0.6); border: 1px solid rgba(9, 40, 43, 0.1);
+  color: rgba(9, 40, 43, 0.75);
+}
+.stfv-aviso.is-liberado {
+  background: rgba(215, 242, 100, 0.25); border-color: var(--lime);
+  color: var(--dark-teal); font-weight: 600;
+}
+.stfv-btn-trava {
+  position: relative; overflow: hidden; flex: 1;
+  border-radius: 999px; border: 0; background: rgba(9, 40, 43, 0.1);
+  padding: 1rem 2rem; cursor: default;
+}
+.stfv-btn-trava .stfv-barra {
+  position: absolute; inset: 0 auto 0 0; width: 0%;
+  background: var(--lime); transition: width .2s linear;
+}
+.stfv-btn-trava .stfv-btn-trava-texto {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  font-size: 0.875rem; font-weight: 600; color: rgba(9, 40, 43, 0.7);
+}
+
+/* ---- Sucesso ---- */
+.stfv-sucesso { text-align: center; padding: 2.5rem 0; }
+.stfv-sucesso h3 { font-size: 1.5rem; font-weight: 700; color: var(--dark-teal); margin: 0 0 0.5rem; }
+.stfv-sucesso p { color: rgba(9, 40, 43, 0.7); margin: 0; }
+
+.stfv-oculto { display: none !important; }
+
+</style>
+</head>
+<body>
+
+<!-- ==== COLE DAQUI ====================================================
+     Live Costa Amalfitana — captação — gerado pelo STFV Forms em 03/09/2026, 17:27:58
+     Precisa de 3 coisas: a div#stfv-form abaixo, o bloco de estilo do <head>
+     e o bloco de script logo em seguida.
+     ================================================================== -->
+<div class="stfv-wrap"><div id="stfv-form"></div></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ==== Configuracao =====================================================
+  var SLUG = "amalfitana";
+  var FORM_NAME = "live-costa-amalfitana-2026";
+  var ENDPOINT = "/api/save-lead";
+  var CAMPOS_FIXOS = {
+  "source_id": "LIVE_ITALIA",
+  "fonte": "[Itália] - Live",
+  "expedicao": "Costa Amalfitana"
+};
+  var ETAPAS = [
+  {
+    "titulo": "Seus dados",
+    "tipo": "campos",
+    "textoBotao": "Continuar",
+    "campos": [
+      {
+        "tipo": "texto",
+        "name": "nome",
+        "label": "Nome completo",
+        "obrigatorio": true,
+        "erro": "Digite seu nome completo"
+      },
+      {
+        "tipo": "email",
+        "name": "email",
+        "label": "E-mail",
+        "obrigatorio": true,
+        "placeholder": "voce@email.com"
+      },
+      {
+        "tipo": "whatsapp",
+        "name": "whatsapp",
+        "label": "WhatsApp com DDD",
+        "obrigatorio": true,
+        "placeholder": "(11) 98765-4321"
+      }
+    ]
+  },
+  {
+    "titulo": "Confirmação",
+    "tipo": "campos",
+    "textoBotao": "Enviar",
+    "campos": [
+      {
+        "tipo": "radio",
+        "name": "assistiu_live",
+        "label": "Você assistiu a live e está de acordo?",
+        "obrigatorio": true,
+        "opcoes": [
+          {
+            "label": "Sim, eu assisti tudo e quero seguir os próximos passos",
+            "slug": "assistiu-tudo"
+          },
+          {
+            "label": "Peguei pela metade, e quero entender mais das expedições",
+            "slug": "pela-metade"
+          },
+          {
+            "label": "Não consegui assistir a live e quero entender o roteiro",
+            "slug": "nao-assistiu"
+          }
+        ]
+      }
+    ]
+  }
+];
+  var TRACK_KEYS = ["utm_source","utm_medium","utm_campaign","utm_term","utm_content","utm_id","gclid","fbclid","gbraid","wbraid"];
+  var FALLBACK_UTM_CONTENT = "live-amalfitana";
+  var FIRST_TOUCH = true;
+  var USA_DATALAYER = true;
+  var EVENTO_CONVERSAO = "live_lead";
+  var SLUGS_DE_RESPOSTA = {
+  "assistiu_live": {
+    "Sim, eu assisti tudo e quero seguir os próximos passos": "assistiu-tudo",
+    "Peguei pela metade, e quero entender mais das expedições": "pela-metade",
+    "Não consegui assistir a live e quero entender o roteiro": "nao-assistiu"
+  }
+};
+  var APOS_ENVIO = "redirect";
+  var REDIRECT_URL = "https://wa.me/551148636051";
+  var MSG_TITULO = "Recebemos seus dados!";
+  var MSG_TEXTO = "Nosso time entra em contato em breve pelo WhatsApp.";
+  var ERRO_ENVIO = "Não conseguimos enviar agora. Tente de novo em instantes — ou chame a gente no WhatsApp.";
+  var WHATSAPP_HANDOFF = true;
+  var WHATSAPP_MSG = "Assisti a live da Costa Amalfitana e quero seguir os próximos passos";
+  var REGRAS_SAIDA = [];
+  var MOSTRA_INDICADOR = true;
+  var MOSTRA_ROTULO = true;
+
+  var LEAD_ID_KEY = SLUG + '_lead_id';
+  var TRACK_STORAGE_KEY = SLUG + '_track';
+
+  // ==== Estado ===========================================================
+  var indice = 0;
+  var valores = {};
+  var erros = {};
+  var track = {};
+  var liberados = {};
+  var deadlines = {};
+  var enviando = false;
+  var erroDeEnvio = false;
+  var raiz = document.getElementById('stfv-form');
+  var timerVideo = null;
+
+  // ==== Helpers ==========================================================
+  function mascaraWhatsapp(v) {
+    var d = String(v).replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 2) return d;
+    if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+    if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+    return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+  }
+
+  function mascaraInstagram(v) {
+    var h = String(v).replace(/\s/g, '').replace(/@/g, '').replace(/[^a-zA-Z0-9._]/g, '').slice(0, 30);
+    return h ? '@' + h : '';
+  }
+
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  function validarCampo(campo, valor) {
+    var lista = Array.isArray(valor);
+    var vazio = lista ? valor.length === 0 : !String(valor == null ? '' : valor).trim();
+    if (campo.tipo === 'oculto') return '';
+    if (vazio) return campo.obrigatorio ? (campo.erro || 'Campo obrigatório') : '';
+    var v = lista ? '' : String(valor);
+    if (campo.tipo === 'texto') return v.trim().length < 3 ? (campo.erro || 'Preencha este campo') : '';
+    if (campo.tipo === 'email') return EMAIL_RE.test(v.trim()) ? '' : (campo.erro || 'Digite um e-mail válido');
+    if (campo.tipo === 'whatsapp') {
+      var d = v.replace(/\D/g, '');
+      return d.length === 11 && d[2] === '9' ? '' : (campo.erro || 'Digite um celular válido com DDD (11 dígitos). Ex.: (11) 98765-4321');
+    }
+    if (campo.tipo === 'instagram') return v.replace('@', '').length >= 2 ? '' : (campo.erro || 'Digite seu @ do Instagram');
+    return '';
+  }
+
+  function gerarLeadId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function pushDataLayer(evento, dados) {
+    if (!USA_DATALAYER) return;
+    window.dataLayer = window.dataLayer || [];
+    var o = { event: evento, form_name: FORM_NAME };
+    for (var k in dados) if (Object.prototype.hasOwnProperty.call(dados, k)) o[k] = dados[k];
+    window.dataLayer.push(o);
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ==== Tracking =========================================================
+  function capturarTrack() {
+    var params = new URLSearchParams(window.location.search);
+    var salvo = {};
+    if (FIRST_TOUCH) {
+      try {
+        salvo = JSON.parse(sessionStorage.getItem(TRACK_STORAGE_KEY) || '{}') || {};
+      } catch (e) { salvo = {}; }
+    }
+    TRACK_KEYS.forEach(function (k) {
+      var atual = salvo[k] || '';
+      var daUrl = (params.get(k) || '').slice(0, 200);
+      // First-touch: quem chegou primeiro manda; a URL so preenche vazio.
+      track[k] = FIRST_TOUCH ? (atual || daUrl) : daUrl;
+    });
+    if (FIRST_TOUCH) {
+      try { sessionStorage.setItem(TRACK_STORAGE_KEY, JSON.stringify(track)); } catch (e) {}
+    }
+    // Fallback DERIVADO (nao persistido): se voltar taggeado, o valor real vence.
+    if (FALLBACK_UTM_CONTENT && TRACK_KEYS.indexOf('utm_content') >= 0 && !track.utm_content) {
+      track.utm_content = FALLBACK_UTM_CONTENT;
+    }
+  }
+
+  // ==== Render ===========================================================
+  function htmlCampo(campo) {
+    if (campo.tipo === 'oculto') return '';
+    var erro = erros[campo.name] || '';
+    var valor = valores[campo.name];
+    var classe = 'stfv-campo' + (campo.largura === 'metade' ? ' is-metade' : '');
+    var rodape = erro
+      ? '<p class="stfv-erro">' + esc(erro) + '</p>'
+      : (campo.ajuda ? '<p class="stfv-ajuda">' + esc(campo.ajuda) + '</p>' : '');
+
+    if (campo.tipo === 'radio' || campo.tipo === 'checkbox') {
+      var marcado = Array.isArray(valor) ? valor : (valor ? [valor] : []);
+      var opcoes = (campo.opcoes || []).map(function (o) {
+        var chk = marcado.indexOf(o.label) >= 0 ? ' checked' : '';
+        return '<label class="stfv-opcao"><input type="' + (campo.tipo === 'radio' ? 'radio' : 'checkbox') +
+          '" name="' + esc(campo.name) + '" value="' + esc(o.label) + '"' + chk + ' data-campo="' + esc(campo.name) + '" />' +
+          '<span>' + esc(o.label) + '</span></label>';
+      }).join('');
+      return '<fieldset class="' + classe + '"><legend class="stfv-label stfv-legend' + (erro ? ' is-erro' : '') + '">' +
+        esc(campo.label) + '</legend><div class="stfv-opcoes">' + opcoes + '</div>' + rodape + '</fieldset>';
+    }
+
+    if (campo.tipo === 'consentimento') {
+      var c = valor === 'sim' ? ' checked' : '';
+      return '<div class="' + classe + '"><label class="stfv-opcao">' +
+        '<input type="checkbox" data-campo="' + esc(campo.name) + '" data-consent="1"' + c + ' />' +
+        '<span>' + esc(campo.label) + '</span></label>' + rodape + '</div>';
+    }
+
+    var opcional = campo.obrigatorio ? '' : '<span class="stfv-opcional">(opcional)</span>';
+    var rotulo = '<label class="stfv-label" for="' + esc(campo.name) + '">' + esc(campo.label) + opcional + '</label>';
+    var cls = 'stfv-input' + (erro ? ' is-erro' : '');
+
+    if (campo.tipo === 'select') {
+      var itens = (campo.opcoes || []).map(function (o) {
+        return '<option value="' + esc(o.label) + '"' + (valor === o.label ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+      }).join('');
+      return '<div class="' + classe + '">' + rotulo + '<select class="' + cls + '" id="' + esc(campo.name) +
+        '" name="' + esc(campo.name) + '" data-campo="' + esc(campo.name) + '"><option value="">' +
+        esc(campo.placeholder || 'Selecione…') + '</option>' + itens + '</select>' + rodape + '</div>';
+    }
+
+    if (campo.tipo === 'textarea') {
+      return '<div class="' + classe + '">' + rotulo + '<textarea class="' + cls + '" id="' + esc(campo.name) +
+        '" name="' + esc(campo.name) + '" rows="4" placeholder="' + esc(campo.placeholder) +
+        '" data-campo="' + esc(campo.name) + '">' + esc(valor) + '</textarea>' + rodape + '</div>';
+    }
+
+    var tipoHtml = campo.tipo === 'email' ? 'email'
+      : campo.tipo === 'whatsapp' ? 'tel'
+      : campo.tipo === 'data' ? 'date'
+      : campo.tipo === 'numero' ? 'number' : 'text';
+    var extra = campo.tipo === 'whatsapp' ? ' maxlength="15" inputmode="numeric"' : '';
+    if (campo.tipo === 'instagram') extra += ' autocapitalize="none"';
+    return '<div class="' + classe + '">' + rotulo + '<input class="' + cls + '" type="' + tipoHtml +
+      '" id="' + esc(campo.name) + '" name="' + esc(campo.name) + '" placeholder="' + esc(campo.placeholder) +
+      '" value="' + esc(valor) + '" data-campo="' + esc(campo.name) + '"' + extra + ' />' + rodape + '</div>';
+  }
+
+  function render() {
+    var etapa = ETAPAS[indice];
+    if (!etapa) return;
+    var liberada = etapa.tipo !== 'video' || liberados[indice] === true;
+    var ultima = indice === ETAPAS.length - 1;
+    var h = '';
+
+    if (MOSTRA_INDICADOR && ETAPAS.length > 1) {
+      h += '<div class="stfv-steps">';
+      ETAPAS.forEach(function (_, i) {
+        if (i > 0) h += '<span class="stfv-step-linha"></span>';
+        var estado = i === indice ? ' is-ativo' : (i < indice ? ' is-passado' : '');
+        h += '<span class="stfv-step-dot' + estado + '">' + (i + 1) + '</span>';
+      });
+      h += '</div>';
+    }
+
+    if (MOSTRA_ROTULO) {
+      var prefixo = ETAPAS.length > 1 ? 'Etapa ' + (indice + 1) + ' de ' + ETAPAS.length + ' · ' : '';
+      h += '<p class="stfv-etapa-rotulo">' + esc(prefixo + etapa.titulo) + '</p>';
+    }
+
+    if (etapa.tipo === 'video') {
+      h += '<div class="stfv-video">' + (etapa.video && etapa.video.embedHtml ? etapa.video.embedHtml : '') + '</div>';
+      h += liberada
+        ? '<div class="stfv-aviso is-liberado">' + esc(etapa.video.textoLiberado) + '</div>'
+        : '<div class="stfv-aviso">' + esc(etapa.video.textoBloqueado) + '</div>';
+    } else {
+      h += '<div class="stfv-campos">' + etapa.campos.map(htmlCampo).join('') + '</div>';
+    }
+
+    if (erroDeEnvio) h += '<p class="stfv-erro" style="text-align:center;margin-top:1.5rem">' + esc(ERRO_ENVIO) + '</p>';
+
+    h += '<div class="stfv-acoes">';
+    if (indice > 0) h += '<button type="button" class="stfv-btn stfv-btn-outline" data-acao="voltar">Voltar</button>';
+    if (ultima) {
+      h += '<button type="submit" class="stfv-btn stfv-btn-primary"' + (enviando || !liberada ? ' disabled' : '') + '>' +
+        esc(enviando ? 'Enviando…' : etapa.textoBotao) + '</button>';
+    } else if (!liberada) {
+      h += '<button type="button" class="stfv-btn-trava" disabled><span class="stfv-barra"></span>' +
+        '<span class="stfv-btn-trava-texto">Carregando as próximas perguntas…</span></button>';
+    } else {
+      h += '<button type="button" class="stfv-btn stfv-btn-primary" data-acao="avancar">' + esc(etapa.textoBotao) + '</button>';
+    }
+    h += '</div>';
+
+    raiz.innerHTML = '<form class="stfv-form" novalidate>' + h + '</form>';
+    ligarEventos();
+    if (etapa.tipo === 'video' && !liberada) iniciarTrava();
+  }
+
+  function renderSucesso() {
+    raiz.innerHTML = '<div class="stfv-form"><div class="stfv-sucesso"><h3>' + esc(MSG_TITULO) +
+      '</h3><p>' + esc(MSG_TEXTO) + '</p></div></div>';
+  }
+
+  // ==== Eventos ==========================================================
+  function ligarEventos() {
+    var form = raiz.querySelector('form');
+    if (!form) return;
+
+    form.addEventListener('submit', function (e) { e.preventDefault(); enviar(); });
+
+    form.querySelectorAll('[data-acao="avancar"]').forEach(function (b) {
+      b.addEventListener('click', avancar);
+    });
+    form.querySelectorAll('[data-acao="voltar"]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        pushDataLayer('form_step_back', { from_step: indice + 1, to_step: indice });
+        indice = Math.max(0, indice - 1);
+        render();
+      });
+    });
+
+    form.querySelectorAll('[data-campo]').forEach(function (el) {
+      var name = el.getAttribute('data-campo');
+      var tipo = el.type;
+      if (tipo === 'radio') {
+        el.addEventListener('change', function () { valores[name] = el.value; erros[name] = ''; });
+      } else if (tipo === 'checkbox' && el.getAttribute('data-consent')) {
+        el.addEventListener('change', function () { valores[name] = el.checked ? 'sim' : ''; erros[name] = ''; });
+      } else if (tipo === 'checkbox') {
+        el.addEventListener('change', function () {
+          var atual = Array.isArray(valores[name]) ? valores[name].slice() : [];
+          var i = atual.indexOf(el.value);
+          if (el.checked && i < 0) atual.push(el.value);
+          if (!el.checked && i >= 0) atual.splice(i, 1);
+          valores[name] = atual; erros[name] = '';
+        });
+      } else {
+        el.addEventListener('input', function () {
+          var campo = acharCampo(name);
+          if (campo && campo.tipo === 'whatsapp') el.value = mascaraWhatsapp(el.value);
+          if (campo && campo.tipo === 'instagram') el.value = mascaraInstagram(el.value);
+          valores[name] = el.value; erros[name] = '';
+        });
+      }
+    });
+  }
+
+  function acharCampo(name) {
+    for (var i = 0; i < ETAPAS.length; i++) {
+      var achado = ETAPAS[i].campos.filter(function (c) { return c.name === name; })[0];
+      if (achado) return achado;
+    }
+    return null;
+  }
+
+  function iniciarTrava() {}
+
+  // ==== Fluxo ============================================================
+  function validarEtapa() {
+    var etapa = ETAPAS[indice];
+    var ok = true;
+    etapa.campos.forEach(function (campo) {
+      var v = valores[campo.name];
+      if (v === undefined) v = campo.tipo === 'checkbox' ? [] : '';
+      var msg = validarCampo(campo, v);
+      erros[campo.name] = msg;
+      if (msg) {
+        ok = false;
+        pushDataLayer('form_validation_error', { step: indice + 1, field: campo.name });
+      }
+    });
+    return ok;
+  }
+
+  function avancar() {
+    var etapa = ETAPAS[indice];
+    if (etapa.tipo === 'video' && !liberados[indice]) return;
+    if (!validarEtapa()) { render(); return; }
+    if (!sessionStorage.getItem(LEAD_ID_KEY)) sessionStorage.setItem(LEAD_ID_KEY, gerarLeadId());
+    pushDataLayer('form_step_complete', { step: indice + 1, lead_id: sessionStorage.getItem(LEAD_ID_KEY) });
+    indice = Math.min(indice + 1, ETAPAS.length - 1);
+    pushDataLayer('form_step_view', { step: indice + 1 });
+    render();
+  }
+
+  function montarPayload(leadId) {
+    var respostas = {};
+    ETAPAS.forEach(function (et) {
+      et.campos.forEach(function (campo) {
+        if (campo.tipo === 'oculto') { respostas[campo.name] = campo.valorFixo || ''; return; }
+        var v = valores[campo.name];
+        var texto = Array.isArray(v) ? v.join(', ') : String(v == null ? '' : v);
+        // WhatsApp em E.164 e e-mail minúsculo: é o formato que o CRM espera,
+        // e no modo webhook direto não há backend pra normalizar depois.
+        if (campo.tipo === 'whatsapp') texto = texto ? '+55' + texto.replace(/\D/g, '') : '';
+        if (campo.tipo === 'email') texto = texto.trim().toLowerCase();
+        respostas[campo.name] = texto;
+      });
+    });
+    var payload = { lead_id: leadId };
+    for (var f in CAMPOS_FIXOS) payload[f] = CAMPOS_FIXOS[f];
+    for (var r in respostas) payload[r] = respostas[r];
+    for (var t in track) payload[t] = track[t];
+    payload.form_name = FORM_NAME;
+    payload.slug = SLUG;
+    payload.timestamp = new Date().toISOString();
+    payload.etapa = 'completo';
+    payload.formulario_completo = true;
+    return { payload: payload, respostas: respostas };
+  }
+
+  /** Pra onde este lead vai, dada a resposta dele. */
+  function destinoDoLead(respostas) {
+    for (var i = 0; i < REGRAS_SAIDA.length; i++) {
+      var regra = REGRAS_SAIDA[i];
+      if (respostas[regra.campo] === regra.valor)
+        return { url: regra.url, whatsapp: regra.whatsapp };
+    }
+    return { url: REDIRECT_URL, whatsapp: WHATSAPP_HANDOFF };
+  }
+
+  function concluir(respostas) {
+    sessionStorage.removeItem(LEAD_ID_KEY);
+    var saida = destinoDoLead(respostas);
+    var url = saida.url;
+    if (saida.whatsapp) {
+      var msg = WHATSAPP_MSG.replace(/\{(\w+)\}/g, function (_m, chave) {
+        return String(respostas[chave] == null ? '' : respostas[chave]).trim();
+      });
+      try {
+        sessionStorage.setItem('stfv_wa_msg', msg);
+        sessionStorage.removeItem('stfv_wa_redirecionado');
+      } catch (e) {}
+      // Indo direto pro WhatsApp a mensagem tem que ir na URL: o sessionStorage
+      // so e lido quando existe uma pagina de obrigado nossa no meio.
+      if (/wa\.me|api\.whatsapp\.com/.test(url))
+        url += (url.indexOf('?') === -1 ? '?' : '&') + 'text=' + encodeURIComponent(msg);
+    }
+    if (APOS_ENVIO === 'redirect') window.location.href = url;
+    else renderSucesso();
+  }
+
+  function enviar() {
+    var etapa = ETAPAS[indice];
+    if (etapa.tipo === 'video' && !liberados[indice]) return;
+    erroDeEnvio = false;
+    if (!validarEtapa()) { render(); return; }
+
+    var leadId = sessionStorage.getItem(LEAD_ID_KEY) || gerarLeadId();
+    sessionStorage.setItem(LEAD_ID_KEY, leadId);
+    var montado = montarPayload(leadId);
+
+    enviando = true;
+    render();
+
+    fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(montado.payload)
+    })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('envio ' + resp.status);
+        var navegou = false;
+        var fim = function () { if (navegou) return; navegou = true; concluir(montado.respostas); };
+        if (USA_DATALAYER) {
+          var respSlugs = {};
+          for (var name in SLUGS_DE_RESPOSTA) {
+            respSlugs[name] = SLUGS_DE_RESPOSTA[name][montado.respostas[name]] || '';
+          }
+          window.dataLayer = window.dataLayer || [];
+          var evento = {
+            event: EVENTO_CONVERSAO,
+            form_name: FORM_NAME,
+            destino: SLUG,
+            event_id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+            lead: {
+              nome: montado.respostas.nome || '',
+              email: montado.respostas.email || '', // já normalizado acima
+              whatsapp: montado.respostas.whatsapp || '', // já em E.164
+              instagram: montado.respostas.instagram || ''
+            },
+            resp: respSlugs,
+            eventCallback: fim,
+            eventTimeout: 2000
+          };
+          for (var k in track) evento[k] = track[k];
+          window.dataLayer.push(evento);
+          // Rede de seguranca: se o GTM nao chamar o callback, conclui mesmo assim.
+          setTimeout(fim, 2000);
+        } else {
+          fim();
+        }
+      })
+      .catch(function () {
+        if (APOS_ENVIO === 'redirect') {
+          // O envio falhou, mas segurar o lead aqui e o pior dos dois males:
+          // quem chega no destino a gente ja tem (o numero esta na conversa),
+          // quem fica parado numa mensagem de erro some. Ultima tentativa de
+          // salvar com sendBeacon, que sobrevive a saida da pagina, e vai.
+          try {
+            if (navigator.sendBeacon) {
+              navigator.sendBeacon(
+                ENDPOINT,
+                new Blob([JSON.stringify(montado.payload)], { type: 'application/json' })
+              );
+            }
+          } catch (e) { /* sem rede: vai pro destino do mesmo jeito */ }
+          concluir(montado.respostas);
+          return;
+        }
+        erroDeEnvio = true;
+        enviando = false;
+        render();
+      });
+  }
+
+  // ==== Boot =============================================================
+  capturarTrack();
+  pushDataLayer('form_step_view', { step: 1 });
+  render();
+})();
+</script>
+<!-- ==== ATE AQUI ==== -->
+
+</body>
+</html>

@@ -5,6 +5,16 @@
   "framework": null,
   "rewrites": [
     { "source": "/f/:slug", "destination": "/api/form?slug=:slug" },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "forms.setuforeuvouviagens.com.br" }],
+      "destination": "/api/form?slug="
+    },
+    {
+      "source": "/:slug([a-z0-9-]+)",
+      "has": [{ "type": "host", "value": "forms.setuforeuvouviagens.com.br" }],
+      "destination": "/api/form?slug=:slug"
+    },
     { "source": "/((?!api/|f/).*)", "destination": "/index.html" }
   ],
   "headers": [

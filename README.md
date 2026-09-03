@@ -208,13 +208,31 @@ essa garantia não se perca numa refatoração distraída.
 A rota também **falha fechada**: sem `PUBLICAR_SENHA` configurada ela responde 503, em vez de
 ficar aberta. Esquecimento de configuração não pode virar porta aberta.
 
+### Um endereço curto por live: `forms.setuforeuvouviagens.com.br/<slug>`
+
+O domínio `forms.setuforeuvouviagens.com.br` aponta pra este mesmo project. Nele, o caminho de
+um segmento **é o slug do formulário**: `/tailandia` serve o que `/f/tailandia` serve. É o link
+que vai pro grupo de WhatsApp no fim da live.
+
+Isso mora em `vercel.json`, e é preso ao host de propósito — no `stfv-forms-geral.vercel.app` os
+mesmos caminhos continuam abrindo o painel. Slug que não existe cai numa página "Formulário não
+encontrado", não no painel.
+
+Cada live tem o **seu** slug. Antes eram todas em `/f/live`, um endereço reaproveitado — e com
+seis lives no mesmo mês isso quebra: quem ficou com o link da live passada entra na fonte da
+live nova, sem sintoma nenhum.
+
 ### Depois de publicar um slug novo
 
-1. registre o slug em `FORMS`, no `api/save-lead.mjs` (é a allowlist de campos);
-2. crie a env var `WEBHOOK_<SLUG>` na Vercel com o webhook do n8n.
+1. registre o slug em `FORMS`, no `api/save-lead.mjs` (é a allowlist de campos).
 
-Sem a env var o lead **não se perde** — vai pro ledger do Supabase e pros logs da função —
-mas também não chega no Bitrix. Configure antes de divulgar o link.
+Esse passo **não é opcional e falha calado**: fora da allowlist, só os `CAMPOS_MINIMOS` passam —
+`assistiu_live` seria descartado no servidor e o negócio nasceria sem a resposta que separa quem
+assistiu de quem não assistiu. Nome, e-mail, WhatsApp e fonte chegam do mesmo jeito, então o
+lead parece certo até alguém procurar a resposta.
+
+O lead vai direto pro Bitrix por `BITRIX_WEBHOOK_URL` — não há env var por formulário. Recusado
+lá, ele é guardado em `stfv_leads_pendentes`; não se perde.
 
 ---
 

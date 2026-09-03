@@ -25,13 +25,24 @@ const TABELA_PENDENTES = 'stfv_leads_pendentes'
  * formulário manda entra no lead, o resto do body é descartado. Evita
  * mass-assignment e mantém o negócio do Bitrix limpo.
  */
+const CAMPOS_LIVE = ['expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live']
+
+/**
+ * Um formulario por live (setembro/2026): forms.setuforeuvouviagens.com.br/<slug>.
+ * `live` continua aqui pelo link antigo, que ainda circula em grupo de WhatsApp.
+ * Live nova: acrescente o slug AQUI tambem -- fora desta lista o `assistiu_live`
+ * seria descartado em silencio (CAMPOS_MINIMOS nao o inclui) e o negocio nasceria
+ * sem a resposta que separa quem assistiu de quem nao assistiu.
+ */
 const FORMS = {
-  live: {
-    campos: ['expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live'],
-  },
-  exemplo: {
-    campos: ['expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live'],
-  },
+  amalfitana: { campos: CAMPOS_LIVE },
+  tailandia: { campos: CAMPOS_LIVE },
+  turquia: { campos: CAMPOS_LIVE },
+  islandia: { campos: CAMPOS_LIVE },
+  japao: { campos: CAMPOS_LIVE },
+  egito: { campos: CAMPOS_LIVE },
+  live: { campos: CAMPOS_LIVE },
+  exemplo: { campos: CAMPOS_LIVE },
 }
 
 /**
