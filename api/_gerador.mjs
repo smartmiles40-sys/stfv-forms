@@ -665,7 +665,7 @@ function gerarHtml(spec) {
     p("  // especialista, sala do Meet e o card do Bitrix atualizado.");
     p(`  var QS_ORIGEM = '${origemDe(spec.destino.agendamentoUrl)}';`);
     p("");
-    p("  function renderAgendamento(respostas) {");
+    p("  function renderAgendamento(respostas, jaNoBitrix) {");
     p(`    var url = QS_ORIGEM + '${caminhoDe(spec.destino.agendamentoUrl)}?embed=1&expedicao=' +`);
     p("      encodeURIComponent(CAMPOS_FIXOS.expedicao || '');");
     p("");
@@ -698,9 +698,10 @@ function gerarHtml(spec) {
     p("          telefone: respostas.whatsapp || '',");
     p("          expedicao: CAMPOS_FIXOS.expedicao || '',");
     p("          origem: CAMPOS_FIXOS.fonte || '',");
-    p("          // O negocio no Bitrix JA foi criado pelo /api/save-lead acima. Sem");
-    p("          // este aviso o QS abriria um segundo card da mesma pessoa.");
-    p("          ja_no_bitrix: true");
+    p("          // So afirma que o negocio existe quando o /api/save-lead REALMENTE");
+    p("          // respondeu ok. Se o envio falhou, mentir aqui faria o QS pular a");
+    p("          // criacao do card e a pessoa ficaria sem negocio nenhum no Bitrix.");
+    p("          ja_no_bitrix: jaNoBitrix === true");
     p("        }, QS_ORIGEM);");
     p("      }");
     p("");
@@ -718,9 +719,9 @@ function gerarHtml(spec) {
     p("    quadro.src = url;");
     p("  }");
     p("");
-    p("  function concluir(respostas) {");
+    p("  function concluir(respostas, salvou) {");
     p("    sessionStorage.removeItem(LEAD_ID_KEY);");
-    p("    renderAgendamento(respostas);");
+    p("    renderAgendamento(respostas, salvou === true);");
     p("  }");
   } else {
     p("  function concluir(respostas) {");
@@ -766,7 +767,7 @@ function gerarHtml(spec) {
   p("      .then(function (resp) {");
   p("        if (!resp.ok) throw new Error('envio ' + resp.status);");
   p("        var navegou = false;");
-  p("        var fim = function () { if (navegou) return; navegou = true; concluir(montado.respostas); };");
+  p("        var fim = function () { if (navegou) return; navegou = true; concluir(montado.respostas, true); };");
   p("        if (USA_DATALAYER) {");
   p("          var respSlugs = {};");
   p("          for (var name in SLUGS_DE_RESPOSTA) {");
@@ -810,7 +811,10 @@ function gerarHtml(spec) {
   p("              );");
   p("            }");
   p("          } catch (e) { /* sem rede: vai pro destino do mesmo jeito */ }");
-  p("          concluir(montado.respostas);");
+  p("          // salvou = false: o POST falhou. O sendBeacon acima e a ultima");
+  p("          // tentativa, e ninguem sabe se ela chegou \u2014 entao a etapa seguinte");
+  p("          // NAO pode afirmar que o negocio ja existe no Bitrix.");
+  p("          concluir(montado.respostas, false);");
   p("          return;");
   p("        }");
   p("        erroDeEnvio = true;");
