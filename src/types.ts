@@ -124,7 +124,22 @@ export type Destino = {
   slug: string
   /** Pares name/valor mandados sempre (expedicao, fonte, source_id...). */
   camposFixos: CampoFixo[]
-  aposEnvio: 'redirect' | 'mensagem'
+  /**
+   * redirect     = manda a pessoa pra outra pagina (wa.me, /obrigado.html...)
+   * mensagem     = fica na propria pagina, com o titulo/texto de sucesso
+   * agendamento  = fica na pagina e mostra a AGENDA embutida, pra pessoa marcar
+   *                a reuniao na hora (Bruno, 08/09/2026 — o numero unico do
+   *                time estava sendo derrubado pelo volume das lives, e mandar
+   *                todo mundo pra uma conversa que ninguem responde perde a
+   *                reuniao que ja estava ganha)
+   */
+  aposEnvio: 'redirect' | 'mensagem' | 'agendamento'
+  /**
+   * A pagina do autoagendamento (modo 'agendamento'). Recebe `?embed=1` e a
+   * expedicao; nome, e-mail e WhatsApp vao por postMessage, nunca pela URL —
+   * endereco de iframe fica no historico do navegador e em log pelo caminho.
+   */
+  agendamentoUrl: string
   /** Destino padrao — vale quando nenhuma regra de saida bate. */
   redirectUrl: string
   /** Saidas condicionais por resposta. Vazio = redirect unico. So no modo 'redirect'. */

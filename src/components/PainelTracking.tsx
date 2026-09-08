@@ -290,7 +290,7 @@ export default function PainelTracking({ spec, onChange }: Props) {
       <div className="painel">
         <div className="painel-titulo">Depois do envio</div>
         <div className="space-y-4 p-4">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               className={`rounded-xl border p-3 text-left transition-colors ${
@@ -319,7 +319,44 @@ export default function PainelTracking({ spec, onChange }: Props) {
                 Troca o formulário por um agradecimento.
               </span>
             </button>
+            <button
+              type="button"
+              className={`rounded-xl border p-3 text-left transition-colors ${
+                d.aposEnvio === 'agendamento'
+                  ? 'border-lime-dark bg-lime/15'
+                  : 'border-dark-teal/15 hover:border-dark-teal/30'
+              }`}
+              onClick={() => setD({ aposEnvio: 'agendamento' })}
+            >
+              <span className="block text-xs font-bold">Agendar reunião</span>
+              <span className="mt-1 block text-[11px] text-dark-teal/55">
+                Mostra a agenda do QS na hora.
+              </span>
+            </button>
           </div>
+
+          {d.aposEnvio === 'agendamento' && (
+            <div className="space-y-3">
+              <div>
+                <label className="campo-builder">Página do agendamento</label>
+                <input
+                  className="input-builder"
+                  value={d.agendamentoUrl}
+                  onChange={(e) => setD({ agendamentoUrl: e.target.value })}
+                  placeholder="https://qs-turis.vercel.app/agendar/"
+                />
+                <p className="mt-1 text-[11px] leading-snug text-dark-teal/55">
+                  A pessoa escolhe dia e hora sem sair daqui, e a reunião nasce no QS com
+                  especialista, sala do Meet e o card do Bitrix atualizado. Nome, e-mail e
+                  WhatsApp que ela acabou de digitar vão preenchidos.
+                </p>
+              </div>
+              <p className="rounded-lg bg-lime/10 p-2.5 text-[11px] leading-snug text-dark-teal/70">
+                O título e o texto abaixo aparecem <strong>acima</strong> da agenda. O
+                redirecionamento e as saídas condicionais não valem neste modo.
+              </p>
+            </div>
+          )}
 
           {d.aposEnvio === 'redirect' ? (
             <div className="space-y-3">

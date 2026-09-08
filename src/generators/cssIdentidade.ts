@@ -9,7 +9,8 @@
 //
 // Os valores sao os mesmos do tailwind.config.js das LPs:
 //   dark-teal #09282B · lime #D7F264 (dark #C0E046) · off-white #F8F6F7
-//   soft-green #EDF5DC · fonte Inter
+//   soft-green #EDF5DC · corpo em Inter · titulos em Moret (moret-variable,
+//   kit Adobe Typekit zec1zie — a mesma tipografia da LP Peru)
 // ============================================================================
 
 export function cssPuro(): string {
@@ -24,6 +25,7 @@ export function cssPuro(): string {
   --lime-dark: #C0E046;
   --off-white: #F8F6F7;
   --soft-green: #EDF5DC;
+  --fonte-titulo: "moret-variable", "Moret", Georgia, serif;
 
   font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--dark-teal);
@@ -59,6 +61,7 @@ export function cssPuro(): string {
 /* ---- Campos ---- */
 .stfv-etapa-rotulo {
   display: block; text-align: center; margin-bottom: 1.5rem;
+  font-family: var(--fonte-titulo);
   font-size: 0.875rem; font-weight: 600; color: rgba(9, 40, 43, 0.6);
 }
 .stfv-campos { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
@@ -163,7 +166,12 @@ textarea.stfv-input { resize: vertical; min-height: 7rem; }
 
 /* ---- Sucesso ---- */
 .stfv-sucesso { text-align: center; padding: 2.5rem 0; }
-.stfv-sucesso h3 { font-size: 1.5rem; font-weight: 700; color: var(--dark-teal); margin: 0 0 0.5rem; }
+.stfv-sucesso h3 {
+  font-family: var(--fonte-titulo);
+  font-size: 1.5rem; font-weight: 700; color: var(--dark-teal); margin: 0 0 0.5rem;
+}
+/* Use em qualquer titulo solto que voce adicionar ao form. */
+.stfv-form .stfv-titulo { font-family: var(--fonte-titulo); }
 .stfv-sucesso p { color: rgba(9, 40, 43, 0.7); margin: 0; }
 
 .stfv-oculto { display: none !important; }
@@ -184,6 +192,10 @@ export function cssTailwind(): string {
   }
   .card {
     @apply bg-white rounded-3xl shadow-card p-6 md:p-8;
+  }
+  /* Titulos do form na fonte de titulo das expedicoes (Moret). Corpo segue Inter. */
+  .stfv-titulo {
+    font-family: "moret-variable", "Moret", Georgia, serif;
   }
   .input-label {
     @apply block text-sm font-semibold text-dark-teal mb-2;
@@ -207,7 +219,11 @@ export function cssTailwind(): string {
     @apply text-red-600;
   }
 
-/* E no tailwind.config.js, dentro de theme.extend:
+/* No index.html da LP, carregue a Moret (kit Adobe Typekit da LP Peru):
+   <link rel="preconnect" href="https://use.typekit.net" />
+   <link rel="stylesheet" href="https://use.typekit.net/zec1zie.css" />
+
+   E no tailwind.config.js, dentro de theme.extend:
    colors: {
      'dark-teal': { DEFAULT: '#09282B', light: '#0F3A3F', soft: '#14494E' },
      'off-white': '#F8F6F7',
@@ -218,6 +234,9 @@ export function cssTailwind(): string {
    boxShadow: {
      'lime-glow': '0 12px 40px -8px rgba(215, 242, 100, 0.4)',
      card: '0 8px 30px rgba(9, 40, 43, 0.08)',
+   },
+   fontFamily: {
+     display: ['"moret-variable"', '"Moret"', 'Georgia', 'serif'],
    },
 */
 `

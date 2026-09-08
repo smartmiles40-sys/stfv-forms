@@ -29,6 +29,9 @@ export function gerarReactTsx(spec: FormSpec): string {
     : []
   // O helper do WhatsApp sai se QUALQUER saida usar: a padrao ou uma das regras.
   const wa = spec.destino.whatsappHandoff || regras.some((r) => r.whatsapp)
+  // A Moret so entra se o form tiver algum titulo: a tela de sucesso (quando nao
+  // redireciona) ou o rotulo de etapa.
+  const usaFonteTitulo = !redireciona || spec.aparencia.rotuloEtapa
   const L: string[] = []
   const p = (...linhas: string[]) => L.push(...linhas)
 
@@ -36,6 +39,9 @@ export function gerarReactTsx(spec: FormSpec): string {
     'Depende das classes de formulario do index.css da LP (.input, .input-label,',
     '.btn-primary, .btn-outline, .radio-group, .radio-item, .field-error,',
     '.input-error, .card). Se a LP nao tiver, exporte a aba "CSS" do gerador.',
+    'Os titulos saem na Moret (moret-variable). Se a LP nao carregar o kit da',
+    'Adobe Typekit no index.html (https://use.typekit.net/zec1zie.css), eles caem',
+    'em Georgia/serif — o resto do form nao muda.',
   ]))
   p('')
 
@@ -105,6 +111,14 @@ export function gerarReactTsx(spec: FormSpec): string {
   p(`const ERRO_ENVIO = ${JSON.stringify(spec.destino.erroEnvio)}`)
   if (wa) p(`const WHATSAPP_MSG = ${JSON.stringify(spec.destino.whatsappMensagem)}`)
   p('')
+  // Fonte de titulo das expedicoes (Moret). Vai inline no componente gerado de
+  // proposito: nem toda LP tem a chave `display` no tailwind.config.js, e um
+  // style inline sempre funciona. So sai quando algum titulo usa — as LPs
+  // compilam com noUnusedLocals e uma const orfa quebraria o build.
+  if (usaFonteTitulo) {
+    p(`const FONTE_TITULO = { fontFamily: '"moret-variable", "Moret", Georgia, serif' }`)
+    p('')
+  }
   p('const LEAD_ID_KEY = `${SLUG}_lead_id`')
   if (temTrack && spec.tracking.firstTouch) p('const TRACK_STORAGE_KEY = `${SLUG}_track`')
   if (wa) {
@@ -548,7 +562,7 @@ export function gerarReactTsx(spec: FormSpec): string {
     p('  if (enviado) {')
     p('    return (')
     p('      <div id="form-success" className="card rounded-2xl bg-white text-center py-10">')
-    p(`        <p className="font-serif text-2xl font-bold text-dark-teal mb-2">${escaparJsx(spec.destino.mensagemTitulo)}</p>`)
+    p(`        <p style={FONTE_TITULO} className="text-2xl font-bold text-dark-teal mb-2">${escaparJsx(spec.destino.mensagemTitulo)}</p>`)
     p(`        <p className="text-dark-teal/70">${escaparJsx(spec.destino.mensagemTexto)}</p>`)
     p('      </div>')
     p('    )')
@@ -589,7 +603,7 @@ export function gerarReactTsx(spec: FormSpec): string {
   }
 
   if (spec.aparencia.rotuloEtapa) {
-    p('      <p className="input-label !mb-6 text-center text-dark-teal/60">')
+    p('      <p style={FONTE_TITULO} className="input-label !mb-6 text-center text-dark-teal/60">')
     if (spec.etapas.length > 1) {
       p('        {`Etapa ${indice + 1} de ${ETAPAS.length} · ${etapa.titulo}`}')
     } else {

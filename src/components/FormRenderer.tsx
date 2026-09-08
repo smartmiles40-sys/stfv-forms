@@ -138,10 +138,39 @@ export default function FormRenderer({ spec, simulado = true }: Props) {
     )
   }
 
+  // No modo 'agendamento' o preview mostra a moldura da agenda, nao a agenda de
+  // verdade: embutir o QS aqui dependeria de o dominio do painel estar no
+  // frame-ancestors dele, e em `npm run dev` (localhost) nunca esta — a caixa
+  // apareceria vazia e pareceria defeito do formulario.
+  if (enviado && spec.destino.aposEnvio === 'agendamento') {
+    return (
+      <div className={`${spec.aparencia.cartao ? 'card' : ''} rounded-2xl bg-white py-8`}>
+        <div className="text-center">
+          <p className="stfv-titulo text-2xl font-bold text-dark-teal mb-2">
+            {spec.destino.mensagemTitulo}
+          </p>
+          <p className="text-dark-teal/70">{spec.destino.mensagemTexto}</p>
+        </div>
+        <div className="mt-6 rounded-xl border-2 border-dashed border-dark-teal/20 bg-dark-teal/[0.03] px-4 py-10 text-center">
+          <p className="text-sm font-bold text-dark-teal/70">Agenda do QS</p>
+          <p className="mx-auto mt-1 max-w-xs text-xs leading-snug text-dark-teal/50">
+            No ar, aqui entra a grade de dias e horários — com nome, e-mail e WhatsApp já
+            preenchidos. Confira em {spec.destino.agendamentoUrl}
+          </p>
+        </div>
+        <div className="text-center">
+          <button type="button" className="btn-ghost mt-6" onClick={() => { setEnviado(false); setIndice(0); setValores({}) }}>
+            Testar de novo
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (enviado && spec.destino.aposEnvio === 'mensagem') {
     return (
       <div className={`${spec.aparencia.cartao ? 'card' : ''} rounded-2xl bg-white text-center py-10`}>
-        <p className="font-serif text-2xl font-bold text-dark-teal mb-2">
+        <p className="stfv-titulo text-2xl font-bold text-dark-teal mb-2">
           {spec.destino.mensagemTitulo}
         </p>
         <p className="text-dark-teal/70">{spec.destino.mensagemTexto}</p>
@@ -159,7 +188,7 @@ export default function FormRenderer({ spec, simulado = true }: Props) {
     return (
       <div className={`${spec.aparencia.cartao ? 'card' : ''} rounded-2xl bg-white text-center py-10`}>
         <Check className="mx-auto h-10 w-10 text-lime-dark" strokeWidth={3} />
-        <p className="font-serif text-xl font-bold text-dark-teal mt-3">Enviado</p>
+        <p className="stfv-titulo text-xl font-bold text-dark-teal mt-3">Enviado</p>
         <p className="text-sm text-dark-teal/60 mt-1">
           O lead foi gravado no CRM e seria levado para
         </p>
@@ -195,7 +224,7 @@ export default function FormRenderer({ spec, simulado = true }: Props) {
       )}
 
       {spec.aparencia.rotuloEtapa && (
-        <p className="input-label !mb-6 text-center text-dark-teal/60">
+        <p className="input-label stfv-titulo !mb-6 text-center text-dark-teal/60">
           {etapas.length > 1 ? `Etapa ${indice + 1} de ${etapas.length} · ` : ''}
           {etapa.titulo}
         </p>

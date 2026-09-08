@@ -46,10 +46,33 @@ function liveBifurcada(): FormSpec {
   }
 }
 
+/**
+ * O modo 'agendamento' (08/09/2026): em vez de mandar a pessoa embora, o
+ * formulario mostra a agenda do QS embutida e ela marca a reuniao ali.
+ *
+ * Emite um `concluir` completamente diferente — sem redirect, sem WhatsApp — e
+ * uma funcao a mais. Sem este caso, esse caminho inteiro ficaria fora do
+ * `node --check`, e um erro de sintaxe so apareceria no formulario publicado.
+ */
+function liveAgendando(): FormSpec {
+  const base = presetLive()
+  return {
+    ...base,
+    destino: {
+      ...base.destino,
+      aposEnvio: 'agendamento',
+      mensagemTitulo: 'Recebemos seus dados!',
+      mensagemTexto:
+        'Falta um passo: escolha o melhor dia e horário para conversar com um especialista.',
+    },
+  }
+}
+
 const casos: [string, FormSpec][] = [
   ['expedicao', presetExpedicao()],
   ['live', presetLive()],
   ['live-bifurcada', liveBifurcada()],
+  ['live-agendando', liveAgendando()],
   ['simples', presetSimples()],
   ['vazio', presetVazio()],
 ]

@@ -36,6 +36,12 @@
   .card {
     @apply bg-white rounded-3xl shadow-card p-6 md:p-8;
   }
+  /* Titulos do formulario na fonte de titulo das expedicoes (Moret, kit
+     Typekit zec1zie da LP Peru). O resto do form segue em Inter — serifada
+     em label/input piora a legibilidade no mobile. */
+  .stfv-titulo {
+    font-family: "moret-variable", "Moret", Georgia, serif;
+  }
   .input-label {
     @apply block text-sm font-semibold text-dark-teal mb-2;
   }

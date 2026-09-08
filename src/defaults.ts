@@ -1,6 +1,14 @@
 import type { Campo, Etapa, FormSpec, Opcao, TipoCampo } from './types'
 import { placeholderPadrao, uid } from './lib/util'
 
+/**
+ * A pagina do autoagendamento do QS (modo aposEnvio: 'agendamento').
+ *
+ * Mora aqui, e nao no codigo do gerador, porque e um ENDERECO — se um dia o QS
+ * mudar de dominio, isto vira campo no painel e nao precisa de deploy do form.
+ */
+export const AGENDAMENTO_URL_PADRAO = 'https://qs-turis.vercel.app/agendar/'
+
 // ============================================================================
 // Presets. O "Expedição completo" e a transcricao fiel do FormularioLead.tsx
 // que ja roda nas LPs (contato -> video com trava -> perfil de viagem), pra
@@ -154,6 +162,7 @@ export function presetExpedicao(): FormSpec {
         { id: uid('fixo'), name: 'source_id', valor: '' },
       ],
       aposEnvio: 'redirect',
+      agendamentoUrl: AGENDAMENTO_URL_PADRAO,
       redirectUrl: '/obrigado.html',
       regrasSaida: [],
       mensagemTitulo: 'Recebemos seus dados!',

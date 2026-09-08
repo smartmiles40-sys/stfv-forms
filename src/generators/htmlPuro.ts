@@ -27,6 +27,9 @@ export function gerarHtml(spec: FormSpec): string {
   p('<link rel="preconnect" href="https://fonts.googleapis.com" />')
   p('<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />')
   p('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />')
+  // Moret (moret-variable): fonte de titulo das expedicoes, kit Adobe Typekit da LP Peru.
+  p('<link rel="preconnect" href="https://use.typekit.net" />')
+  p('<link rel="stylesheet" href="https://use.typekit.net/zec1zie.css" />')
   p('<style>')
   p('body { margin: 0; background: #F8F6F7; padding: 2rem 1rem; }')
   p('.stfv-wrap { max-width: 42rem; margin: 0 auto; }')
@@ -429,26 +432,100 @@ export function gerarHtml(spec: FormSpec): string {
   p('    return { url: REDIRECT_URL, whatsapp: WHATSAPP_HANDOFF };')
   p('  }')
   p('')
-  p('  function concluir(respostas) {')
-  p('    sessionStorage.removeItem(LEAD_ID_KEY);')
-  p('    var saida = destinoDoLead(respostas);')
-  p('    var url = saida.url;')
-  p('    if (saida.whatsapp) {')
-  p('      var msg = WHATSAPP_MSG.replace(/\\{(\\w+)\\}/g, function (_m, chave) {')
-  p("        return String(respostas[chave] == null ? '' : respostas[chave]).trim();")
-  p('      });')
-  p('      try {')
-  p("        sessionStorage.setItem('stfv_wa_msg', msg);")
-  p("        sessionStorage.removeItem('stfv_wa_redirecionado');")
-  p('      } catch (e) {}')
-  p('      // Indo direto pro WhatsApp a mensagem tem que ir na URL: o sessionStorage')
-  p('      // so e lido quando existe uma pagina de obrigado nossa no meio.')
-  p('      if (/wa\\.me|api\\.whatsapp\\.com/.test(url))')
-  p("        url += (url.indexOf('?') === -1 ? '?' : '&') + 'text=' + encodeURIComponent(msg);")
-  p('    }')
-  p("    if (APOS_ENVIO === 'redirect') window.location.href = url;")
-  p('    else renderSucesso();')
-  p('  }')
+  // ── Modo 'agendamento': a agenda entra no lugar do redirect ───────────────
+  // Emitido byte a byte igual ao que ja roda nos 7 formularios de live desde
+  // 08/09 (o patch em qs-turis/scripts/patch-forms-agendamento.mjs). Mexer aqui
+  // sem reaplicar la faz o html publicado divergir do gerador, e o sintoma so
+  // aparece na proxima republicacao.
+  if (spec.destino.aposEnvio === 'agendamento') {
+    p('  // ==== AUTOAGENDAMENTO (QS) ============================================')
+    p('  // Antes daqui a pessoa era jogada no wa.me. Trocado em 08/09/2026: o numero')
+    p('  // unico do time estava sendo derrubado pelo volume, e mandar todo mundo pra')
+    p('  // uma conversa que ninguem responde perde a reuniao que ja estava ganha.')
+    p('  // Agora ela escolhe o horario na hora, e a reuniao nasce no QS com')
+    p('  // especialista, sala do Meet e o card do Bitrix atualizado.')
+    // Aspas simples (e nao JSON.stringify) pra bater byte a byte com o que ja
+    // esta publicado nos 7 formularios de live — assim "regerar e comparar o
+    // md5" continua sendo uma conferencia valida. E seguro porque `origemDe`
+    // devolve o `.origin` de uma URL: so sai esquema, host e porta, onde aspa
+    // simples nao existe.
+    p(`  var QS_ORIGEM = '${origemDe(spec.destino.agendamentoUrl)}';`)
+    p('')
+    p('  function renderAgendamento(respostas) {')
+    p(`    var url = QS_ORIGEM + '${caminhoDe(spec.destino.agendamentoUrl)}?embed=1&expedicao=' +`)
+    p("      encodeURIComponent(CAMPOS_FIXOS.expedicao || '');")
+    p('')
+    p('    raiz.innerHTML =')
+    p("      '<div class=\"stfv-form\">' +")
+    p("        '<div class=\"stfv-sucesso\" style=\"padding:1.25rem 0 0.75rem\">' +")
+    p("          '<h3>' + esc(MSG_TITULO) + '</h3>' +")
+    p("          '<p>' + esc(MSG_TEXTO) + '</p>' +")
+    p("        '</div>' +")
+    p("        '<iframe id=\"stfv-agenda\" title=\"Escolha o dia e o horario\" loading=\"eager\" ' +")
+    p("          'style=\"width:100%;border:0;display:block;min-height:520px\"></iframe>' +")
+    p("      '</div>';")
+    p('')
+    p("    var quadro = document.getElementById('stfv-agenda');")
+    p('')
+    p("    window.addEventListener('message', function (e) {")
+    p("      if (e.origin !== QS_ORIGEM || !e.data || typeof e.data !== 'object') return;")
+    p('')
+    p('      // O iframe avisa quando esta pronto; so entao os dados vao. Sem esse')
+    p('      // aperto de mao, a mensagem sai antes de existir quem a escute.')
+    p("      if (e.data.tipo === 'qs-agendar:pronto') {")
+    p('        quadro.contentWindow.postMessage({')
+    p("          tipo: 'qs-agendar:preencher',")
+    p("          nome: respostas.nome || '',")
+    p("          email: respostas.email || '',")
+    p("          telefone: respostas.whatsapp || '',")
+    p("          expedicao: CAMPOS_FIXOS.expedicao || '',")
+    p("          origem: CAMPOS_FIXOS.fonte || '',")
+    p('          // O negocio no Bitrix JA foi criado pelo /api/save-lead acima. Sem')
+    p('          // este aviso o QS abriria um segundo card da mesma pessoa.')
+    p('          ja_no_bitrix: true')
+    p('        }, QS_ORIGEM);')
+    p('      }')
+    p('')
+    p('      // O iframe nao sabe a propria altura pra quem esta de fora.')
+    p("      if (e.data.tipo === 'qs-agendar:altura' && e.data.altura) {")
+    p("        quadro.style.height = e.data.altura + 'px';")
+    p('      }')
+    p('')
+    p("      if (e.data.tipo === 'qs-agendar:concluido') {")
+    p("        pushDataLayer('reuniao_agendada', { form_name: FORM_NAME, destino: SLUG });")
+    p('      }')
+    p('    });')
+    p('')
+    p("    // src depois do listener: iframe em cache dispara o 'pronto' rapido demais.")
+    p('    quadro.src = url;')
+    p('  }')
+    p('')
+    p('  function concluir(respostas) {')
+    p('    sessionStorage.removeItem(LEAD_ID_KEY);')
+    p('    renderAgendamento(respostas);')
+    p('  }')
+  } else {
+    p('  function concluir(respostas) {')
+    p('    sessionStorage.removeItem(LEAD_ID_KEY);')
+    p('    var saida = destinoDoLead(respostas);')
+    p('    var url = saida.url;')
+    p('    if (saida.whatsapp) {')
+    p('      var msg = WHATSAPP_MSG.replace(/\\{(\\w+)\\}/g, function (_m, chave) {')
+    p("        return String(respostas[chave] == null ? '' : respostas[chave]).trim();")
+    p('      });')
+    p('      try {')
+    p("        sessionStorage.setItem('stfv_wa_msg', msg);")
+    p("        sessionStorage.removeItem('stfv_wa_redirecionado');")
+    p('      } catch (e) {}')
+    p('      // Indo direto pro WhatsApp a mensagem tem que ir na URL: o sessionStorage')
+    p('      // so e lido quando existe uma pagina de obrigado nossa no meio.')
+    p('      if (/wa\\.me|api\\.whatsapp\\.com/.test(url))')
+    p("        url += (url.indexOf('?') === -1 ? '?' : '&') + 'text=' + encodeURIComponent(msg);")
+    p('    }')
+    p("    if (APOS_ENVIO === 'redirect') window.location.href = url;")
+    p('    else renderSucesso();')
+    p('  }')
+  }
   p('')
   p('  function enviar() {')
   p('    var etapa = ETAPAS[indice];')
@@ -536,6 +613,31 @@ export function gerarHtml(spec: FormSpec): string {
   p('</html>')
 
   return L.join('\n')
+}
+
+/**
+ * Quebra a URL do agendamento em ORIGEM e CAMINHO.
+ *
+ * A origem sai separada porque e ela — e so ela — que o `postMessage` usa nos
+ * dois sentidos: como destino ao mandar os dados e como filtro ao receber. Usar
+ * a URL inteira ali faria a conferencia nunca bater (origin nao tem caminho) e
+ * o preenchimento simplesmente nao aconteceria, sem erro nenhum na tela.
+ */
+function origemDe(url: string): string {
+  try {
+    return new URL(url).origin
+  } catch {
+    return 'https://qs-turis.vercel.app'
+  }
+}
+
+function caminhoDe(url: string): string {
+  try {
+    const p = new URL(url).pathname
+    return p.endsWith('/') ? p : `${p}/`
+  } catch {
+    return '/agendar/'
+  }
 }
 
 function escaparHtml(texto: string): string {
