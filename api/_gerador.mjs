@@ -665,7 +665,7 @@ function gerarHtml(spec) {
     p("  // especialista, sala do Meet e o card do Bitrix atualizado.");
     p(`  var QS_ORIGEM = '${origemDe(spec.destino.agendamentoUrl)}';`);
     p("");
-    p("  function renderAgendamento(respostas, jaNoBitrix) {");
+    p("  function renderAgendamento(respostas, jaNoBitrix, payload) {");
     p(`    var url = QS_ORIGEM + '${caminhoDe(spec.destino.agendamentoUrl)}?embed=1&expedicao=' +`);
     p("      encodeURIComponent(CAMPOS_FIXOS.expedicao || '');");
     p("");
@@ -712,6 +712,27 @@ function gerarHtml(spec) {
     p("");
     p("      if (e.data.tipo === 'qs-agendar:concluido') {");
     p("        pushDataLayer('reuniao_agendada', { form_name: FORM_NAME, destino: SLUG });");
+    p("        // AGORA o lead vai pro Bitrix. Antes daqui ele so ficou guardado:");
+    p("        // o negocio nasce quando a pessoa TERMINA o funil, nao quando ela");
+    p("        // digita o nome. Nasce ja no funil comercial, na coluna de reuniao,");
+    p("        // e ja dizendo o horario, o especialista e o link da sala.");
+    p("        //");
+    p('        // keepalive: a pessoa costuma fechar a aba assim que ve o "marcado".');
+    p("        // Sem isso o navegador cancelaria o envio no meio e a reuniao");
+    p("        // existiria no QS sem card no CRM.");
+    p("        try {");
+    p("          fetch(ENDPOINT, {");
+    p("            method: 'POST',");
+    p("            headers: { 'Content-Type': 'application/json' },");
+    p("            keepalive: true,");
+    p("            body: JSON.stringify(Object.assign({}, payload || {}, {");
+    p("              agendado: true,");
+    p("              reuniao_quando: e.data.quando || '',");
+    p("              reuniao_especialista: e.data.especialista || '',");
+    p("              reuniao_link: e.data.link || ''");
+    p("            }))");
+    p("          });");
+    p("        } catch (err) { /* o QS ja tem a reuniao; o card entra pela lista de espera */ }");
     p("      }");
     p("    });");
     p("");
@@ -719,9 +740,9 @@ function gerarHtml(spec) {
     p("    quadro.src = url;");
     p("  }");
     p("");
-    p("  function concluir(respostas, salvou) {");
+    p("  function concluir(respostas, salvou, payload) {");
     p("    sessionStorage.removeItem(LEAD_ID_KEY);");
-    p("    renderAgendamento(respostas, salvou === true);");
+    p("    renderAgendamento(respostas, salvou === true, payload);");
     p("  }");
   } else {
     p("  function concluir(respostas) {");
@@ -767,7 +788,7 @@ function gerarHtml(spec) {
   p("      .then(function (resp) {");
   p("        if (!resp.ok) throw new Error('envio ' + resp.status);");
   p("        var navegou = false;");
-  p("        var fim = function () { if (navegou) return; navegou = true; concluir(montado.respostas, true); };");
+  p("        var fim = function () { if (navegou) return; navegou = true; concluir(montado.respostas, true, montado.payload); };");
   p("        if (USA_DATALAYER) {");
   p("          var respSlugs = {};");
   p("          for (var name in SLUGS_DE_RESPOSTA) {");
@@ -814,7 +835,7 @@ function gerarHtml(spec) {
   p("          // salvou = false: o POST falhou. O sendBeacon acima e a ultima");
   p("          // tentativa, e ninguem sabe se ela chegou \u2014 entao a etapa seguinte");
   p("          // NAO pode afirmar que o negocio ja existe no Bitrix.");
-  p("          concluir(montado.respostas, false);");
+  p("          concluir(montado.respostas, false, montado.payload);");
   p("          return;");
   p("        }");
   p("        erroDeEnvio = true;");

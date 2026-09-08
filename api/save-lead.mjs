@@ -25,7 +25,13 @@ const TABELA_PENDENTES = 'stfv_leads_pendentes'
  * formulário manda entra no lead, o resto do body é descartado. Evita
  * mass-assignment e mantém o negócio do Bitrix limpo.
  */
-const CAMPOS_LIVE = ['expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live']
+// `reuniao_*` so chegam na SEGUNDA chamada (a de quem agendou) e viram
+// observacao no negocio: o card ja nasce dizendo a reuniao, o especialista e o
+// link da sala, sem depender de nenhuma sincronizacao posterior.
+const CAMPOS_LIVE = [
+  'expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live',
+  'reuniao_quando', 'reuniao_especialista', 'reuniao_link',
+]
 
 /**
  * Um formulario por live (setembro/2026): forms.setuforeuvouviagens.com.br/<slug>.
@@ -35,15 +41,49 @@ const CAMPOS_LIVE = ['expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsa
  * sem a resposta que separa quem assistiu de quem nao assistiu.
  */
 const FORMS = {
-  amalfitana: { campos: CAMPOS_LIVE },
-  tailandia: { campos: CAMPOS_LIVE },
-  turquia: { campos: CAMPOS_LIVE },
-  islandia: { campos: CAMPOS_LIVE },
-  japao: { campos: CAMPOS_LIVE },
-  egito: { campos: CAMPOS_LIVE },
-  peru: { campos: CAMPOS_LIVE },
+  amalfitana: { campos: CAMPOS_LIVE, soComAgendamento: true },
+  tailandia: { campos: CAMPOS_LIVE, soComAgendamento: true },
+  turquia: { campos: CAMPOS_LIVE, soComAgendamento: true },
+  islandia: { campos: CAMPOS_LIVE, soComAgendamento: true },
+  japao: { campos: CAMPOS_LIVE, soComAgendamento: true },
+  egito: { campos: CAMPOS_LIVE, soComAgendamento: true },
+  peru: { campos: CAMPOS_LIVE, soComAgendamento: true },
   live: { campos: CAMPOS_LIVE },
   exemplo: { campos: CAMPOS_LIVE },
+}
+
+/**
+ * `soComAgendamento` (Bruno, 08/09/2026): o negocio no Bitrix so nasce quando a
+ * pessoa TERMINA o funil — ou seja, quando ela escolhe o horario na etapa 3.
+ * Quem preenche os dados e vai embora antes NAO vira card.
+ *
+ * QUEM NAO AGENDA NAO E JOGADO FORA. Fica em `stfv_leads_pendentes` com
+ * motivo 'aguardando_agendamento', que e uma lista consultavel:
+ *
+ *   select criado_em, nome, whatsapp, email, slug from stfv_leads_pendentes
+ *    where motivo = 'aguardando_agendamento' and not recuperado
+ *    order by criado_em desc;
+ *
+ * Isso importa porque, medido em 60 dias, so 18% dos leads de live chegam a ter
+ * agendamento (7 de 39). Os outros 82% deixam de entrar no CRM — e com eles sai
+ * tambem o follow-up das SDRs, que e de onde vinha boa parte desses 18%. Se o
+ * numero de reunioes cair, e AQUI que se olha primeiro.
+ */
+
+/**
+ * Onde o negocio nasce quando a reuniao JA esta marcada: funil 0
+ * ("Comercial 1 - Se tu for eu vou"), coluna EXECUTING ("Reuniao de Vendas").
+ *
+ * Nasce direto no lugar certo em vez de nascer na Pre-Vendas e ser movido: o
+ * card nunca passa por uma coluna onde nao deveria estar, nem por um segundo
+ * que seja.
+ *
+ * `categoryId` e STRING e o funil e o ZERO — cuidado com `||` em cima disso,
+ * que trocaria 0 pelo padrao 25 sem avisar.
+ */
+const FUNIL_AGENDADO = {
+  categoryId: process.env.BITRIX_CATEGORY_AGENDADO ?? '0',
+  stageId: process.env.BITRIX_STAGE_AGENDADO ?? 'EXECUTING',
 }
 
 /**
@@ -173,6 +213,36 @@ async function guardarPendente(lead, motivo) {
   }
 }
 
+/**
+ * A pessoa agendou: a linha que estava esperando deixa de ser pendencia.
+ *
+ * Best-effort. Falhar aqui deixa uma linha marcada como pendente que ja virou
+ * negocio — ruim de ler, mas nao perde nada. O contrario (apagar antes de ter
+ * certeza) perderia o lead.
+ */
+async function marcarRecuperado(leadId) {
+  const SB_URL = process.env.SUPABASE_FORMS_URL
+  const SB_KEY = process.env.SUPABASE_FORMS_KEY
+  if (!SB_URL || !SB_KEY || !leadId) return
+  try {
+    await fetch(
+      `${SB_URL.replace(/\/$/, '')}/rest/v1/${TABELA_PENDENTES}?lead_id=eq.${encodeURIComponent(leadId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          apikey: SB_KEY,
+          Authorization: `Bearer ${SB_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ recuperado: true, motivo: 'agendou' }),
+      },
+    )
+  } catch (e) {
+    console.warn('[pendente] nao deu pra marcar como recuperado:', e?.message)
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ ok: false, error: 'method_not_allowed' })
@@ -218,6 +288,19 @@ export default async function handler(req, res) {
   // acontecer depois.
   console.log('[lead]', JSON.stringify(lead))
 
+  // ── FASE 1: ainda nao agendou ────────────────────────────────────────────
+  // Guarda e devolve ok. Nada de Bitrix: o card so nasce quando a pessoa
+  // terminar o funil. Ver o comentario de `soComAgendamento` la em cima.
+  const agendou = body.agendado === true || body.agendado === 'true'
+  if (conf?.soComAgendamento && !agendou) {
+    const guardado = await guardarPendente(lead, 'aguardando_agendamento')
+    // 200 mesmo sem conseguir guardar: segurar a pessoa numa tela de erro aqui
+    // seria perder o agendamento que ela ainda vai fazer, que e o que importa.
+    // O lead continua no log da funcao de qualquer jeito.
+    res.status(200).json({ ok: true, aguardando_agendamento: true, guardado })
+    return
+  }
+
   const base = process.env.BITRIX_WEBHOOK_URL
   if (!base) {
     console.error('[bitrix] BITRIX_WEBHOOK_URL ausente — lead não foi pro CRM')
@@ -228,8 +311,10 @@ export default async function handler(req, res) {
 
   const responsavelId = await proximaSdr()
   const resultado = await criarLead(base, lead, {
-    categoryId: process.env.BITRIX_CATEGORY_ID || FUNIL_PADRAO.categoryId,
-    stageId: process.env.BITRIX_STAGE_ID || FUNIL_PADRAO.stageId,
+    // Agendado nasce no comercial, na coluna de reuniao; o resto segue na
+    // Pre-Vendas, como sempre.
+    categoryId: agendou ? FUNIL_AGENDADO.categoryId : (process.env.BITRIX_CATEGORY_ID || FUNIL_PADRAO.categoryId),
+    stageId: agendou ? FUNIL_AGENDADO.stageId : (process.env.BITRIX_STAGE_ID || FUNIL_PADRAO.stageId),
     responsavelId,
     // A fonte vem do PRÓPRIO formulário (campo fixo `source_id`), não de env
     // var: assim cada formulário publicado declara a sua origem e uma live
@@ -244,7 +329,10 @@ export default async function handler(req, res) {
   })
 
   if (resultado.ok) {
-    console.log('[bitrix] negocio', resultado.negocioId, 'para SDR', responsavelId ?? '(padrao)')
+    console.log('[bitrix] negocio', resultado.negocioId, 'para SDR', responsavelId ?? '(padrao)',
+      agendou ? '(ja agendado -> funil ' + FUNIL_AGENDADO.categoryId + '/' + FUNIL_AGENDADO.stageId + ')' : '')
+    // A linha da fase 1 deixa de ser pendencia — a pessoa terminou o funil.
+    if (agendou) await marcarRecuperado(lead.lead_id)
     res.status(200).json({ ok: true, negocio: resultado.negocioId })
     return
   }
