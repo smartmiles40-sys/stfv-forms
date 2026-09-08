@@ -163,6 +163,7 @@ export function presetExpedicao(): FormSpec {
       ],
       aposEnvio: 'redirect',
       agendamentoUrl: AGENDAMENTO_URL_PADRAO,
+      agendamentoRotulo: 'Escolha o horário',
       redirectUrl: '/obrigado.html',
       regrasSaida: [],
       mensagemTitulo: 'Recebemos seus dados!',

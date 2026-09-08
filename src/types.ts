@@ -140,6 +140,14 @@ export type Destino = {
    * endereco de iframe fica no historico do navegador e em log pelo caminho.
    */
   agendamentoUrl: string
+  /**
+   * Como o passo da agenda se chama no indicador ("Etapa 3 de 3 · ...").
+   *
+   * A agenda CONTA como etapa (Bruno, 08/09/2026): a pessoa precisa saber desde
+   * a primeira tela que sao tres passos, senao ela acha que terminou no segundo
+   * e fecha a aba justamente na hora de marcar.
+   */
+  agendamentoRotulo: string
   /** Destino padrao — vale quando nenhuma regra de saida bate. */
   redirectUrl: string
   /** Saidas condicionais por resposta. Vazio = redirect unico. So no modo 'redirect'. */
