@@ -423,6 +423,126 @@ await teste('rodizio fora do ar nao trava o lead', async () => {
   assert.ok(['20781', '17191'].includes(deal.corpo.fields.ASSIGNED_BY_ID))
 })
 
+// ---------------------------------------------------------------------------
+// Os CAMPOS da reuniao no negocio.
+//
+// O erro que este bloco existe pra impedir: mandar a reuniao so no comentario.
+// O aviso que o Bitrix manda pro time le CAMPOS do negocio, entao reuniao no
+// comentario = aviso com "Data:", "Especialista:" e "SDR:" em branco. E campo
+// vazio no CRM nao da erro nenhum: ninguem descobre.
+// ---------------------------------------------------------------------------
+const DATAHORA_MEET = 'UF_CRM_1773943863374'
+const LINK_MEET = 'UF_CRM_1773947738988'
+const PRODUTO = 'UF_CRM_1773954690276'
+const RESP_REUNIAO = 'UF_CRM_1767801443498'
+const SDR_AGENDOU = 'UF_CRM_1758563297739'
+
+const leadAgendado = () => {
+  const req = leadBom()
+  req.body.slug = 'amalfitana'
+  req.body.source_id = 'LIVE_ITALIA'
+  req.body.expedicao = 'Costa Amalfitana'
+  req.body.agendado = true
+  req.body.reuniao_quando = 'quinta-feira, 11 de setembro as 18h'
+  req.body.reuniao_quando_iso = '2026-09-11T21:00:00.000Z'
+  req.body.reuniao_especialista = 'Talita Carvalho'
+  req.body.reuniao_sdr = 'Mariana'
+  req.body.reuniao_link = 'https://meet.google.com/abc-defg-hij'
+  return req
+}
+
+await teste('quem agenda leva os 5 campos da reuniao NO MESMO deal.add', async () => {
+  // No mesmo add, nao num update depois: e a chegada na coluna de reuniao que
+  // dispara o aviso do Bitrix, e um update logo depois perderia essa corrida.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  delete process.env.BITRIX_SDR_IDS
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const r = resFalso()
+  await saveLead(leadAgendado(), r)
+  assert.equal(r._status, 200, JSON.stringify(r._json))
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  const f = deal.corpo.fields
+  assert.equal(f[DATAHORA_MEET], '2026-09-11T18:00:00-03:00', 'data no fuso de casa')
+  assert.equal(f[LINK_MEET], 'https://meet.google.com/abc-defg-hij')
+  assert.equal(f[PRODUTO], 'Costa Amalfitana')
+  assert.equal(f[RESP_REUNIAO], 851, 'Talita Carvalho na lista de responsaveis')
+  assert.equal(f[SDR_AGENDOU], 921, '"Mariana" casa com "Mariana Rodrigues - SDR"')
+  assert.equal(f.CATEGORY_ID, '0', 'agendado nasce no comercial')
+  assert.equal(f.STAGE_ID, 'EXECUTING')
+  assert.equal(chamadas.filter((c) => c.metodo === 'crm.deal.update').length, 0, 'nada de update depois')
+})
+
+await teste('a reuniao NAO se repete no comentario (cada dado tem seu campo)', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  await saveLead(leadAgendado(), resFalso())
+  const obs = chamadas.find((c) => c.metodo === 'crm.deal.add').corpo.fields.COMMENTS
+  assert.ok(!/reuniao_quando|reuniao_especialista|reuniao_link|reuniao_sdr/.test(obs), obs)
+  assert.ok(obs.includes('assistiu_live'), 'o resto da observacao continua')
+})
+
+await teste('sem o ISO, a data vira RECADO no comentario em vez de sumir', async () => {
+  // Formulario antigo (publicado antes desta mudanca) manda so o texto. O card
+  // tem que dizer que a data ficou de fora, senao o aviso sai em branco calado.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const req = leadAgendado()
+  delete req.body.reuniao_quando_iso
+  await saveLead(req, resFalso())
+  const f = chamadas.find((c) => c.metodo === 'crm.deal.add').corpo.fields
+  assert.ok(!(DATAHORA_MEET in f), 'sem ISO nao inventa data')
+  assert.ok(f.COMMENTS.includes('11 de setembro'), f.COMMENTS)
+  assert.ok(f.COMMENTS.includes('O aviso da reunião vai sair sem'), f.COMMENTS)
+})
+
+await teste('nome fora da lista do Bitrix nao credita a pessoa errada', async () => {
+  // 'Victor' sozinho e ambiguo: a lista tem Victor Hugo (SDR) e Victor
+  // Maldonado (closer). Melhor campo vazio + recado do que credito errado.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({
+    'crm.contact.add': jsonOk(77),
+    'crm.deal.add': jsonOk(88),
+    'crm.deal.userfield.list': jsonOk([]),
+  })
+  const req = leadAgendado()
+  req.body.reuniao_sdr = 'Victor'
+  await saveLead(req, resFalso())
+  const f = chamadas.find((c) => c.metodo === 'crm.deal.add').corpo.fields
+  assert.ok(!(SDR_AGENDOU in f), 'nao pode escolher um Victor no chute')
+  assert.ok(f.COMMENTS.includes('SDR: Victor'), f.COMMENTS)
+})
+
+await teste('nome novo no time e buscado no portal, nao ignorado', async () => {
+  // Contratou SDR novo e ninguem mexeu no codigo: a lista de verdade vem do
+  // Bitrix. Sem isto o campo ficaria vazio pra sempre, sem sintoma.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({
+    'crm.contact.add': jsonOk(77),
+    'crm.deal.add': jsonOk(88),
+    'crm.deal.userfield.list': jsonOk([
+      { FIELD_NAME: SDR_AGENDOU, USER_TYPE_ID: 'enumeration', LIST: [{ ID: '9001', VALUE: 'Fulana Nova - SDR' }] },
+    ]),
+  })
+  const req = leadAgendado()
+  req.body.reuniao_sdr = 'Fulana Nova'
+  await saveLead(req, resFalso())
+  const f = chamadas.find((c) => c.metodo === 'crm.deal.add').corpo.fields
+  assert.equal(f[SDR_AGENDOU], 9001)
+})
+
+await teste('lead que NAO agendou nao leva campo de reuniao nenhum', async () => {
+  // Slug sem `soComAgendamento` (o link velho) segue indo pro Bitrix sem
+  // reuniao: preencher esses campos ali seria mentir no card.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  await saveLead(leadBom(), resFalso())
+  const f = chamadas.find((c) => c.metodo === 'crm.deal.add').corpo.fields
+  for (const campo of [DATAHORA_MEET, LINK_MEET, PRODUTO, RESP_REUNIAO, SDR_AGENDOU]) {
+    assert.ok(!(campo in f), `${campo} nao devia estar preenchido`)
+  }
+  assert.ok(!f.COMMENTS.includes('O aviso da reunião'), 'nem recado de reuniao')
+})
+
 await teste('webhook sem escopo CRM e detectado pelo diagnostico', async () => {
   // A pegadinha: profile.json responde normal e todo crm.* falha.
   stubBitrix({ profile: jsonOk({ NAME: 'Bruno' }), scope: jsonOk(['']) })

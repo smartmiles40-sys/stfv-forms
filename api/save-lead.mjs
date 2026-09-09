@@ -25,12 +25,18 @@ const TABELA_PENDENTES = 'stfv_leads_pendentes'
  * formulário manda entra no lead, o resto do body é descartado. Evita
  * mass-assignment e mantém o negócio do Bitrix limpo.
  */
-// `reuniao_*` so chegam na SEGUNDA chamada (a de quem agendou) e viram
-// observacao no negocio: o card ja nasce dizendo a reuniao, o especialista e o
-// link da sala, sem depender de nenhuma sincronizacao posterior.
+// `reuniao_*` so chegam na SEGUNDA chamada (a de quem agendou) e viram CAMPOS
+// do negocio: o card ja nasce dizendo a reuniao, o especialista, o SDR e o link
+// da sala, sem depender de nenhuma sincronizacao posterior.
+//
+// `reuniao_quando` (texto de gente, "quinta-feira, 11 de setembro as 18h") e
+// `reuniao_quando_iso` (o mesmo instante em ISO) sao os DOIS de proposito: o
+// campo de data do Bitrix nao aceita o texto, e o texto e o que serve de recado
+// quando o ISO nao vem. `reuniao_sdr` e o nome de quem leva o credito no QS.
 const CAMPOS_LIVE = [
   'expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live',
-  'reuniao_quando', 'reuniao_especialista', 'reuniao_link',
+  'reuniao_quando', 'reuniao_quando_iso', 'reuniao_especialista', 'reuniao_sdr',
+  'reuniao_link',
 ]
 
 /**
@@ -322,15 +328,37 @@ export default async function handler(req, res) {
     sourceId: lead.source_id || process.env.BITRIX_SOURCE_ID || 'WEB',
     // Observações levam só o que NÃO tem campo próprio no Bitrix. `source_id` e
     // `fonte` viram o campo Fonte do negócio; repeti-los no comentário só suja
-    // e faz parecer que a origem mora lá — foi exatamente essa a confusão.
+    // e faz parecer que a origem mora lá — foi exatamente essa a confusão. Os
+    // `reuniao_*` saíram daqui pelo mesmo motivo: agora cada um tem o seu campo,
+    // e o que NÃO couber em campo volta escrito no comentário (ver `pulados`).
     camposExtras: campos.filter(
-      (c) => !['nome', 'email', 'whatsapp', 'source_id', 'fonte'].includes(c),
+      (c) => !['nome', 'email', 'whatsapp', 'source_id', 'fonte'].includes(c) &&
+        !c.startsWith('reuniao_'),
     ),
+    // Os campos que o aviso do Bitrix lê. `produto` é a expedição da live: é o
+    // que o formulário sabe sobre o assunto da conversa, e é o que o
+    // especialista precisa ver antes de entrar na sala.
+    reuniao: agendou
+      ? {
+        quando: lead.reuniao_quando || '',
+        quando_iso: lead.reuniao_quando_iso || '',
+        especialista: lead.reuniao_especialista || '',
+        sdr: lead.reuniao_sdr || '',
+        link: lead.reuniao_link || '',
+        produto: lead.expedicao || '',
+      }
+      : null,
   })
 
   if (resultado.ok) {
     console.log('[bitrix] negocio', resultado.negocioId, 'para SDR', responsavelId ?? '(padrao)',
       agendou ? '(ja agendado -> funil ' + FUNIL_AGENDADO.categoryId + '/' + FUNIL_AGENDADO.stageId + ')' : '')
+    // Campo da reuniao que ficou vazio nao da erro em lugar nenhum: o aviso do
+    // Bitrix sai com a linha em branco e ninguem descobre. Fica no log com o
+    // numero do card, que e por onde se acha o caso depois.
+    if (resultado.reuniaoPulados?.length) {
+      console.warn('[bitrix] negocio', resultado.negocioId, 'sem:', resultado.reuniaoPulados.join(' · '))
+    }
     // A linha da fase 1 deixa de ser pendencia — a pessoa terminou o funil.
     if (agendou) await marcarRecuperado(lead.lead_id)
     res.status(200).json({ ok: true, negocio: resultado.negocioId })

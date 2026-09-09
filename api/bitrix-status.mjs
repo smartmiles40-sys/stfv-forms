@@ -9,7 +9,7 @@
 //  etapas existem, e isso não é coisa pra ficar aberta.
 
 import { timingSafeEqual } from 'node:crypto'
-import { verificarBitrix, FUNIL_PADRAO } from './_bitrix.mjs'
+import { verificarBitrix, FUNIL_PADRAO, conferirCamposDaReuniao } from './_bitrix.mjs'
 
 function senhaConfere(recebida, esperada) {
   const a = Buffer.from(String(recebida ?? ''))
@@ -41,6 +41,13 @@ export default async function handler(req, res) {
 
   const diag = await verificarBitrix(base)
 
+  // Os campos que o aviso da reunião lê. Sem isto, a única forma de saber se um
+  // `UF_CRM_*` ainda é o campo que a gente pensa (eles MUDAM se o campo for
+  // recriado no Bitrix) seria mandar um lead de verdade pro CRM e abrir o card.
+  const reuniao = await conferirCamposDaReuniao(base, {
+    nomes: String(req.query?.nomes ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  })
+
   const categoryId = process.env.BITRIX_CATEGORY_ID || FUNIL_PADRAO.categoryId
   const stageId = process.env.BITRIX_STAGE_ID || FUNIL_PADRAO.stageId
   const etapaConfigurada = diag.etapas?.find((e) => e.id === stageId)
@@ -54,5 +61,6 @@ export default async function handler(req, res) {
     etapaConfigurada: etapaConfigurada
       ? `${etapaConfigurada.nome} (${stageId})`
       : `⚠️ a etapa ${stageId} não existe no funil ${categoryId}`,
+    reuniao,
   })
 }

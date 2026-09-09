@@ -728,7 +728,12 @@ function gerarHtml(spec) {
     p("            body: JSON.stringify(Object.assign({}, payload || {}, {");
     p("              agendado: true,");
     p("              reuniao_quando: e.data.quando || '',");
+    p("              // O mesmo instante em ISO, que e o que entra no campo de data do");
+    p('              // CRM: o aviso que o Bitrix manda pro time le CAMPOS, e "quinta-');
+    p('              // feira, 11 de setembro as 18h" nao entra em campo de data.');
+    p("              reuniao_quando_iso: e.data.quando_iso || '',");
     p("              reuniao_especialista: e.data.especialista || '',");
+    p("              reuniao_sdr: e.data.sdr || '',");
     p("              reuniao_link: e.data.link || ''");
     p("            }))");
     p("          });");
