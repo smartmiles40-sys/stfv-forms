@@ -3,6 +3,13 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": null,
+  "redirects": [
+    {
+      "source": "/f/live",
+      "destination": "/f/tailandia",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/f/:slug", "destination": "/api/form?slug=:slug" },
     {
@@ -16,6 +23,9 @@
       "destination": "/api/form?slug=:slug"
     },
     { "source": "/((?!api/|f/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/resgatar-pendentes", "schedule": "17 * * * *" }
   ],
   "headers": [
     {

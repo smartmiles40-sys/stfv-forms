@@ -11,21 +11,12 @@
 //    SUPABASE_FORMS_URL    obrigatória — projeto onde vive stfv_forms_publicados
 //    SUPABASE_FORMS_KEY    obrigatória — service_role (a tabela tem RLS ligado)
 
-import { timingSafeEqual } from 'node:crypto'
+import { portaoDaSenha } from './_portao.mjs'
 import { gerarHtml, avisosDoSpec } from './_gerador.mjs'
 
 const TABELA = 'stfv_forms_publicados'
 /** Um FormSpec real tem alguns KB. 1 MB já é abuso. */
 const LIMITE_BYTES = 1_000_000
-
-/** Comparação de senha em tempo constante. */
-function senhaConfere(recebida, esperada) {
-  const a = Buffer.from(String(recebida ?? ''))
-  const b = Buffer.from(String(esperada ?? ''))
-  // timingSafeEqual exige mesmo tamanho; o length já vaza por si só.
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -45,8 +36,12 @@ export default async function handler(req, res) {
     return
   }
 
-  if (!senhaConfere(req.headers['x-stfv-senha'], SENHA)) {
-    res.status(401).json({ ok: false, erro: 'senha_invalida' })
+  // Senha em tempo constante + teto de tentativas por IP. Publicar e o poder
+  // mais alto daqui (troca o formulario que esta no ar), entao o teto e o mais
+  // apertado: 10 por hora.
+  const portao = await portaoDaSenha(req, { teto: 10 })
+  if (portao) {
+    res.status(portao.status).json(portao.corpo)
     return
   }
 

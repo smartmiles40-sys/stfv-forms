@@ -7,16 +7,9 @@
 //  existem e o spec traz número de WhatsApp e regras de saída. Nada disso é
 //  para ficar aberto.
 
-import { timingSafeEqual } from 'node:crypto'
+import { portaoDaSenha } from './_portao.mjs'
 
 const TABELA = 'stfv_forms_publicados'
-
-function senhaConfere(recebida, esperada) {
-  const a = Buffer.from(String(recebida ?? ''))
-  const b = Buffer.from(String(esperada ?? ''))
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -34,8 +27,9 @@ export default async function handler(req, res) {
     res.status(503).json({ ok: false, erro: 'nao_configurado' })
     return
   }
-  if (!senhaConfere(req.headers['x-stfv-senha'], SENHA)) {
-    res.status(401).json({ ok: false, erro: 'senha_invalida' })
+  const portao = await portaoDaSenha(req, { teto: 30 })
+  if (portao) {
+    res.status(portao.status).json(portao.corpo)
     return
   }
 

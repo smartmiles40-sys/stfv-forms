@@ -13,6 +13,9 @@ import {
 } from 'lucide-react'
 import type { FormSpec } from '../types'
 import { PRESETS } from '../defaults'
+// A MESMA chave do Portao (que ja conferiu a senha no boot): de la, pra nao
+// existirem duas verdades sobre onde a senha mora.
+import { CHAVE_SENHA } from './Portao'
 
 // ============================================================================
 // Pagina inicial: o que existe hoje, num lugar so.
@@ -22,7 +25,6 @@ import { PRESETS } from '../defaults'
 // navegador e ninguem consegue acessar. O mesmo formulario pode estar nos dois.
 // ============================================================================
 
-const CHAVE_SENHA = 'stfv_publicar_senha'
 
 export type FormPublicado = {
   slug: string

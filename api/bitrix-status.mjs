@@ -8,24 +8,15 @@
 //  Protegido pela mesma PUBLICAR_SENHA: o retorno diz qual portal é e quais
 //  etapas existem, e isso não é coisa pra ficar aberta.
 
-import { timingSafeEqual } from 'node:crypto'
 import { verificarBitrix, FUNIL_PADRAO, conferirCamposDaReuniao } from './_bitrix.mjs'
-
-function senhaConfere(recebida, esperada) {
-  const a = Buffer.from(String(recebida ?? ''))
-  const b = Buffer.from(String(esperada ?? ''))
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
+import { portaoDaSenha } from './_portao.mjs'
 
 export default async function handler(req, res) {
-  const SENHA = process.env.PUBLICAR_SENHA
-  if (!SENHA) {
-    res.status(503).json({ ok: false, erro: 'nao_configurado' })
-    return
-  }
-  if (!senhaConfere(req.headers['x-stfv-senha'] ?? req.query?.senha, SENHA)) {
-    res.status(401).json({ ok: false, erro: 'senha_invalida' })
+  // Aceita a senha por header ou por `?senha=` — este e o unico que se abre no
+  // navegador, e e esse o jeito de conferir os campos em 30 segundos.
+  const portao = await portaoDaSenha(req, { teto: 30 })
+  if (portao) {
+    res.status(portao.status).json(portao.corpo)
     return
   }
 

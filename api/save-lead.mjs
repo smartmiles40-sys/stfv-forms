@@ -16,7 +16,9 @@
 //    SUPABASE_FORMS_URL    (opcional) guarda lead que o Bitrix recusou
 //    SUPABASE_FORMS_KEY    (opcional) service_role do mesmo projeto
 
-import { criarLead, FUNIL_PADRAO } from './_bitrix.mjs'
+import { criarLead, atualizarNegocioDaReuniao, FUNIL_PADRAO } from './_bitrix.mjs'
+import { chaveIp, dentroDoTeto } from './_portao.mjs'
+import { idsDoRodizio, proximaSdr } from './_rodizio.mjs'
 
 const TABELA_PENDENTES = 'stfv_leads_pendentes'
 
@@ -36,15 +38,17 @@ const TABELA_PENDENTES = 'stfv_leads_pendentes'
 const CAMPOS_LIVE = [
   'expedicao', 'fonte', 'source_id', 'nome', 'email', 'whatsapp', 'assistiu_live',
   'reuniao_quando', 'reuniao_quando_iso', 'reuniao_especialista', 'reuniao_sdr',
-  'reuniao_link',
+  'reuniao_link', 'reuniao_vinculo',
 ]
 
 /**
  * Um formulario por live (setembro/2026): forms.setuforeuvouviagens.com.br/<slug>.
  * `live` continua aqui pelo link antigo, que ainda circula em grupo de WhatsApp.
- * Live nova: acrescente o slug AQUI tambem -- fora desta lista o `assistiu_live`
- * seria descartado em silencio (CAMPOS_MINIMOS nao o inclui) e o negocio nasceria
- * sem a resposta que separa quem assistiu de quem nao assistiu.
+ *
+ * Live nova: registre o slug AQUI. Desde 10/09 esquecer nao apaga mais dado
+ * nenhum (os campos de live entraram no CAMPOS_MINIMOS), mas o slug de fora da
+ * lista NAO tem `soComAgendamento` — o negocio dele nasce na Pre-Vendas na hora
+ * do envio, em vez de nascer no comercial quando a pessoa agenda.
  */
 const FORMS = {
   amalfitana: { campos: CAMPOS_LIVE, soComAgendamento: true },
@@ -98,7 +102,16 @@ const FUNIL_AGENDADO = {
  * FONTE ser descartada em silêncio e o lead cairia no genérico "Site" — o
  * mesmo erro, de novo, sem sintoma nenhum.
  */
-const CAMPOS_MINIMOS = ['nome', 'email', 'whatsapp', 'source_id', 'fonte', 'expedicao']
+// `assistiu_live` e os `reuniao_*` entraram aqui em 10/09: a allowlist por slug
+// engolia os dois em silencio quando a live era nova e ninguem lembrava de
+// registrar o slug acima. O sintoma era mudo — o negocio nascia sem a resposta
+// que separa quem assistiu de quem nao assistiu, e sem os campos da reuniao.
+// Nenhum deles e perigoso de aceitar por padrao: todos viram texto no card.
+const CAMPOS_MINIMOS = [
+  'nome', 'email', 'whatsapp', 'source_id', 'fonte', 'expedicao', 'assistiu_live',
+  'reuniao_quando', 'reuniao_quando_iso', 'reuniao_especialista', 'reuniao_sdr',
+  'reuniao_link', 'reuniao_vinculo',
+]
 
 const TRACK_KEYS = [
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
@@ -119,56 +132,6 @@ function dataHoraSaoPaulo() {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
   return f.format(new Date()).replace(',', '')
-}
-
-/**
- * Próxima SDR do rodízio.
- *
- * A ordem vem de uma sequence no Postgres porque numa live os envios chegam em
- * rajada e várias funções rodam ao mesmo tempo: `nextval` é atômico, então duas
- * pessoas nunca recebem o mesmo número. Um contador em memória não serviria —
- * cada invocação serverless começa do zero.
- *
- * Se o sorteio falhar, cai em aleatório em vez de travar: distribuir mal é
- * muito melhor do que não registrar o lead.
- */
-async function proximaSdr() {
-  const ids = String(process.env.BITRIX_SDR_IDS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-  if (!ids.length) return null
-  if (ids.length === 1) return ids[0]
-
-  const SB_URL = process.env.SUPABASE_FORMS_URL
-  const SB_KEY = process.env.SUPABASE_FORMS_KEY
-  if (SB_URL && SB_KEY) {
-    const ctrl = new AbortController()
-    const timeout = setTimeout(() => ctrl.abort(), 4000)
-    try {
-      const resp = await fetch(`${SB_URL.replace(/\/$/, '')}/rest/v1/rpc/stfv_proximo_sdr`, {
-        method: 'POST',
-        headers: {
-          apikey: SB_KEY,
-          Authorization: `Bearer ${SB_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: '{}',
-        signal: ctrl.signal,
-      })
-      if (resp.ok) {
-        const n = Number(await resp.json())
-        if (Number.isFinite(n)) return ids[n % ids.length]
-      } else {
-        console.warn('[rodizio] rpc', resp.status, '— caindo pro aleatorio')
-      }
-    } catch (e) {
-      console.warn('[rodizio] indisponivel:', e?.message, '— caindo pro aleatorio')
-    } finally {
-      clearTimeout(timeout)
-    }
-  }
-  return ids[Math.floor(Math.random() * ids.length)]
 }
 
 /**
@@ -220,6 +183,80 @@ async function guardarPendente(lead, motivo) {
 }
 
 /**
+ * AVISA O QS QUAL E O NUMERO DO CARD.
+ *
+ * O card de quem agenda por um formulario de live nasce AQUI, e ate 10/09 o QS
+ * nunca ficava sabendo o numero dele: `qs_leads.bitrix_id` ficava nulo. Medido
+ * em 09/09, 17 das 18 reunioes vindas do formulario estavam assim — e sem esse
+ * numero TODO o resto do funil morre em silencio (`/api/bitrix-sync` do QS
+ * responde `skipped_no_bitrix_id`): desfecho, no-show, reuniao realizada, SAL,
+ * produto e movimento de coluna nunca voltam pro card.
+ *
+ * `vinculo` e um cracha assinado pelo servidor do QS no agendamento. Nao mandamos
+ * id de lead: id vindo do navegador seria porta pra sobrescrever lead alheio, e
+ * esse defeito ja aconteceu por la. Quem assina e o QS; nos so carregamos.
+ *
+ * Best-effort com log alto: o card ja existe e a reuniao ja esta marcada. Falhar
+ * aqui devolve o mundo ao estado de ontem, que era o estado normal — mas o log
+ * tem o numero do card, que e por onde se conserta depois.
+ */
+async function avisarQsDoCard(vinculo, negocioId) {
+  if (!vinculo || !negocioId) return false
+  const base = (process.env.QS_BASE_URL || 'https://qs-turis.vercel.app').replace(/\/$/, '')
+  const ctrl = new AbortController()
+  const timeout = setTimeout(() => ctrl.abort(), 6000)
+  try {
+    const resp = await fetch(`${base}/api/lead-bitrix`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vinculo, bitrix_id: String(negocioId) }),
+      signal: ctrl.signal,
+    })
+    const dados = await resp.json().catch(() => null)
+    if (!resp.ok || !dados?.ok) {
+      console.error('[qs] negocio', negocioId, 'NAO grudou no lead do QS:', resp.status,
+        JSON.stringify(dados)?.slice(0, 200))
+      return false
+    }
+    console.log('[qs] negocio', negocioId, 'grudado no lead', dados.lead_id,
+      dados.moveu_de ? `(saiu do card ${dados.moveu_de.id})` : '')
+    return true
+  } catch (e) {
+    console.error('[qs] negocio', negocioId, 'NAO grudou no lead do QS:', e?.message)
+    return false
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+/**
+ * A linha que este lead deixou na fase 1. Serve pra UMA pergunta: o resgate ja
+ * abriu card pra ele? Se abriu, o agendamento ATUALIZA esse card em vez de abrir
+ * um segundo — ver o comentario de `bitrix_id` na migration.
+ */
+async function pendenteDoLead(leadId) {
+  const SB_URL = process.env.SUPABASE_FORMS_URL
+  const SB_KEY = process.env.SUPABASE_FORMS_KEY
+  if (!SB_URL || !SB_KEY || !leadId) return null
+  const ctrl = new AbortController()
+  const timeout = setTimeout(() => ctrl.abort(), 4000)
+  try {
+    const resp = await fetch(
+      `${SB_URL.replace(/\/$/, '')}/rest/v1/${TABELA_PENDENTES}` +
+      `?select=lead_id,bitrix_id&lead_id=eq.${encodeURIComponent(leadId)}&limit=1`,
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: ctrl.signal },
+    )
+    if (!resp.ok) return null
+    const linhas = await resp.json()
+    return Array.isArray(linhas) && linhas[0] ? linhas[0] : null
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+/**
  * A pessoa agendou: a linha que estava esperando deixa de ser pendencia.
  *
  * Best-effort. Falhar aqui deixa uma linha marcada como pendente que ja virou
@@ -257,6 +294,27 @@ export default async function handler(req, res) {
 
   const body = typeof req.body === 'object' && req.body !== null ? req.body : {}
   const str = (v, max) => String(v ?? '').slice(0, max)
+
+  // ── CAMPO-ARMADILHA ───────────────────────────────────────────────────────
+  // O formulario tem um campo escondido chamado `site`: gente nao ve, robo de
+  // formulario preenche. Responde como se tivesse dado certo — dizer "peguei
+  // voce" so ensina qual campo entregou o robo — e nao grava nada.
+  if (str(body.site, 200).trim()) {
+    console.log('[lead] armadilha: descartado sem gravar')
+    res.status(200).json({ ok: true })
+    return
+  }
+
+  // ── TETO POR IP ───────────────────────────────────────────────────────────
+  // 60 por hora, generoso de proposito: numa live muita gente entra pelo 4G, e
+  // operadora de celular coloca centenas de pessoas atras do MESMO IP (CGNAT).
+  // Um teto apertado ali recusaria lead pago. Isto e contra script em rajada.
+  const teto = Number(process.env.LEAD_TETO_HORA || 60)
+  if (!(await dentroDoTeto(`lead:${chaveIp(req)}`, teto))) {
+    console.warn('[lead] teto por IP estourado')
+    res.status(429).json({ ok: false, error: 'muitas_tentativas' })
+    return
+  }
 
   const slug = str(body.slug, 40)
   const conf = FORMS[slug]
@@ -315,6 +373,39 @@ export default async function handler(req, res) {
     return
   }
 
+  // O resgate já abriu card pra este lead? Então este agendamento MOVE aquele
+  // card, não abre outro. Sem isto, quem preencheu, foi resgatado e voltou pra
+  // agendar terminaria com dois cards da mesma pessoa no funil.
+  const reuniaoDoLead = {
+    quando: lead.reuniao_quando || '',
+    quando_iso: lead.reuniao_quando_iso || '',
+    especialista: lead.reuniao_especialista || '',
+    sdr: lead.reuniao_sdr || '',
+    link: lead.reuniao_link || '',
+    produto: lead.expedicao || '',
+    email: lead.email || '',
+  }
+
+  const jaResgatado = agendou ? await pendenteDoLead(lead.lead_id) : null
+  if (jaResgatado?.bitrix_id) {
+    const upd = await atualizarNegocioDaReuniao(base, jaResgatado.bitrix_id, {
+      funil: FUNIL_AGENDADO,
+      reuniao: reuniaoDoLead,
+      comentario: `Reunião marcada no formulário em ${dataHoraSaoPaulo()}. `
+        + 'Este card foi aberto antes, pelo resgate de quem não tinha agendado.',
+    })
+    if (upd.ok) {
+      console.log('[bitrix] negocio', upd.negocioId, 'ATUALIZADO (resgatado antes, agendou agora)')
+      await marcarRecuperado(lead.lead_id)
+      await avisarQsDoCard(lead.reuniao_vinculo, upd.negocioId)
+      res.status(200).json({ ok: true, negocio: upd.negocioId, atualizado: true })
+      return
+    }
+    // Não deu pra atualizar: segue pro caminho normal e abre o card. Dois cards
+    // é ruim; reunião marcada que não aparece no CRM é pior.
+    console.error('[bitrix] update do card resgatado falhou, vou criar outro:', upd.erro, upd.descricao ?? '')
+  }
+
   const responsavelId = await proximaSdr()
   const resultado = await criarLead(base, lead, {
     // Agendado nasce no comercial, na coluna de reuniao; o resto segue na
@@ -338,16 +429,10 @@ export default async function handler(req, res) {
     // Os campos que o aviso do Bitrix lê. `produto` é a expedição da live: é o
     // que o formulário sabe sobre o assunto da conversa, e é o que o
     // especialista precisa ver antes de entrar na sala.
-    reuniao: agendou
-      ? {
-        quando: lead.reuniao_quando || '',
-        quando_iso: lead.reuniao_quando_iso || '',
-        especialista: lead.reuniao_especialista || '',
-        sdr: lead.reuniao_sdr || '',
-        link: lead.reuniao_link || '',
-        produto: lead.expedicao || '',
-      }
-      : null,
+    reuniao: agendou ? reuniaoDoLead : null,
+    // Pra casar o SDR do QS com o usuario do Bitrix e deixar o card no NOME
+    // dele. So estes ids entram: ninguem novo passa a receber lead por aqui.
+    sdrIds: idsDoRodizio(),
   })
 
   if (resultado.ok) {
@@ -361,6 +446,10 @@ export default async function handler(req, res) {
     }
     // A linha da fase 1 deixa de ser pendencia — a pessoa terminou o funil.
     if (agendou) await marcarRecuperado(lead.lead_id)
+    // E o QS aprende o numero do card. AWAIT de proposito: a funcao serverless
+    // congela quando a resposta sai, entao disparar sem esperar mataria a
+    // chamada no meio de vez em quando — e o defeito seria intermitente.
+    if (agendou) await avisarQsDoCard(lead.reuniao_vinculo, resultado.negocioId)
     res.status(200).json({ ok: true, negocio: resultado.negocioId })
     return
   }

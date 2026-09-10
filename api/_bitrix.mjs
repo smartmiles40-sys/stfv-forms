@@ -36,11 +36,15 @@ const TIMEOUT_MS = 8000
  * que o portal responde hoje, e é lá que se confere antes de desconfiar.
  */
 const CAMPOS_REUNIAO = {
-  datahora_meet: 'UF_CRM_1773943863374', // datetime "Data e hora do agendamento (Google Meet)"
-  link_meet: 'UF_CRM_1773947738988',     // url      "Link do google meet"
-  produto: 'UF_CRM_1773954690276',       // string   "Produto (Descritivo da Reunião)"
-  resp_reuniao: 'UF_CRM_1767801443498',  // enum     "Responsável pela reunião"
-  sdr_agendou: 'UF_CRM_1758563297739',   // enum     "Quem fez o agendamento?"
+  datahora_meet: 'UF_CRM_1773943863374',    // datetime "Data e hora do agendamento (Google Meet)"
+  link_meet: 'UF_CRM_1773947738988',        // url      "Link do google meet"
+  produto: 'UF_CRM_1773954690276',          // string   "Produto (Descritivo da Reunião)"
+  resp_reuniao: 'UF_CRM_1767801443498',     // enum     "Responsável pela reunião"
+  sdr_agendou: 'UF_CRM_1758563297739',      // enum     "Quem fez o agendamento?"
+  // Estes dois o caminho do QS (n8n) já preenchia e o do formulário não —
+  // ficavam vazios só pra quem agendou pela live.
+  email_cliente: 'UF_CRM_1762288786624',    // string   e-mail do cliente
+  data_agendamento: 'UF_CRM_1767724031187', // date     quando o agendamento foi FEITO
 }
 
 /**
@@ -173,6 +177,15 @@ export async function opcoesDoCampo(base, alias, nome) {
   return doPortal.length ? doPortal : conhecidas
 }
 
+/** A data de hoje em São Paulo, YYYY-MM-DD. A função roda em UTC: às 21h de cá
+ *  o `new Date().toISOString()` já está no dia seguinte. */
+function hojeEmSaoPaulo() {
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
+  return p // en-CA já formata como 2026-09-10
+}
+
 /**
  * ISO (UTC) → o formato que o campo de data do Bitrix entende, no fuso de casa.
  * Sem isso a reunião aparece 3h adiantada no card. O Brasil não tem horário de
@@ -185,6 +198,80 @@ function horaDeBrasilia(iso) {
   const p = (n) => String(n).padStart(2, '0')
   return `${b.getUTCFullYear()}-${p(b.getUTCMonth() + 1)}-${p(b.getUTCDate())}` +
     `T${p(b.getUTCHours())}:${p(b.getUTCMinutes())}:${p(b.getUTCSeconds())}-03:00`
+}
+
+/** Cache dos usuários do rodízio (vale por lambda quente). */
+let cacheUsuarios = { quando: 0, lista: null }
+
+/**
+ * O CONTATO JÁ EXISTE NO PORTAL?
+ *
+ * Antes disto, `crm.contact.add` criava sempre. Quem assiste a duas lives e
+ * agenda nas duas virava duas pessoas diferentes no CRM — medido em 09/09: dois
+ * telefones repetidos em 30 dias, um deles real (amalfitana e tailândia). O
+ * closer abria o card sem o histórico da outra conversa.
+ *
+ * Procura por telefone e depois por e-mail, que é como o Bitrix acha duplicado de
+ * verdade (`crm.duplicate.findbycomm` usa o índice de comunicação, não o nome).
+ *
+ * O contato achado é REUSADO, nunca atualizado. Reescrever nome/telefone de um
+ * contato que já existe é o laço que já apagou dado bom aqui — e nada se perde:
+ * o e-mail desta conversa vai no campo da reunião de qualquer jeito.
+ */
+async function contatoExistente(base, lead) {
+  const tentativas = []
+  if (lead.whatsapp) tentativas.push(['PHONE', lead.whatsapp])
+  if (lead.email) tentativas.push(['EMAIL', lead.email])
+
+  for (const [tipo, valor] of tentativas) {
+    const r = await chamar(base, 'crm.duplicate.findbycomm', {
+      entity_type: 'CONTACT', type: tipo, values: [valor],
+    })
+    if (!r.ok) {
+      // Falha aberta: sem resposta a gente CRIA, como fazia antes. Um contato
+      // repetido é chato; um lead que não entra é caro.
+      console.warn('[bitrix] findbycomm falhou:', r.erro || '', r.descricao || '')
+      return null
+    }
+    const ids = Array.isArray(r.result?.CONTACT) ? r.result.CONTACT : []
+    if (ids.length) return { id: String(ids[0]), por: tipo, quantos: ids.length }
+  }
+  return null
+}
+
+/**
+ * O usuário do Bitrix que corresponde ao SDR do QS.
+ *
+ * Existe porque havia DOIS rodízios decidindo de quem é o lead: o responsável do
+ * card saía do rodízio daqui (`BITRIX_SDR_IDS`, que são ids sem nome) e o dono do
+ * lead no QS saía do rodízio do banco. No mesmo card, "Quem fez o agendamento?"
+ * dizia uma pessoa e o responsável era outra — e é o responsável que recebe a
+ * tarefa no Bitrix.
+ *
+ * A busca é pelo NOME, com a mesma escada das listas, e só entre os ids que já
+ * estão na env var: ninguém entra no rodízio por causa desta função.
+ */
+export async function usuarioDoSdr(base, nome, ids) {
+  if (!nome || !Array.isArray(ids) || !ids.length) return null
+  const agora = Date.now()
+  if (!cacheUsuarios.lista || agora - cacheUsuarios.quando >= CACHE_TTL_MS) {
+    const achados = []
+    for (const id of ids) {
+      // Um por um de propósito: `user.get` com lista de ID muda de comportamento
+      // entre versões do Bitrix, e são três ids, uma vez por lambda.
+      const r = await chamar(base, 'user.get', { ID: id })
+      const u = Array.isArray(r.result) ? r.result[0] : null
+      // Sem id repetido: a MESMA pessoa duas vezes na lista faria a regra de
+      // "nenhum empate" recusar um nome que na verdade nao tem ambiguidade.
+      if (u?.ID && !achados.some((a) => a.id === String(u.ID))) {
+        achados.push({ id: String(u.ID), value: `${u.NAME ?? ''} ${u.LAST_NAME ?? ''}`.trim() })
+      }
+    }
+    if (!achados.length) return null   // não cacheia vazio
+    cacheUsuarios = { quando: agora, lista: achados }
+  }
+  const achado = acharOpcao(cacheUsuarios.lista, nome)
+  return achado != null ? String(achado) : null
 }
 
 /**
@@ -206,6 +293,13 @@ export async function camposDaReuniao(base, reuniao) {
   else pulados.push('Link do Meet (a sala não foi criada — crie pela Agenda do QS)')
 
   if (reuniao.produto) fields[CAMPOS_REUNIAO.produto] = String(reuniao.produto).slice(0, 250)
+
+  if (reuniao.email) fields[CAMPOS_REUNIAO.email_cliente] = String(reuniao.email).slice(0, 120)
+
+  // A data em que o agendamento foi FEITO (hoje), não a da reunião. É o mesmo
+  // `booking_date` que o caminho do QS manda, e ela vai em data pura: campo de
+  // data com hora dentro é o jeito de o filtro do Bitrix varrer o dia errado.
+  fields[CAMPOS_REUNIAO.data_agendamento] = hojeEmSaoPaulo()
 
   for (const [alias, nome, rotulo] of [
     ['resp_reuniao', reuniao.especialista, 'Especialista'],
@@ -250,7 +344,7 @@ export async function chamar(base, metodo, params) {
 }
 
 /** Monta o texto que vai no campo de observacoes do negocio. */
-function observacoes(lead, camposExtras, faltando = []) {
+function observacoes(lead, camposExtras, faltando = [], recado = null) {
   const linhas = []
   for (const chave of camposExtras) {
     const v = lead[chave]
@@ -262,6 +356,7 @@ function observacoes(lead, camposExtras, faltando = []) {
   if (faltando.length) {
     linhas.push('', '⚠️ O aviso da reunião vai sair sem: ' + faltando.join(' · '))
   }
+  if (recado) linhas.push(recado)
   const track = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
     'utm_id', 'gclid', 'fbclid', 'gbraid', 'wbraid']
   const rastro = track.filter((k) => lead[k]).map((k) => `${k}=${lead[k]}`)
@@ -288,18 +383,31 @@ export async function criarLead(base, lead, opcoes = {}) {
   const sourceId = opcoes.sourceId || 'WEB'
 
   const nome = String(lead.nome || '').trim()
-  const contato = await chamar(base, 'crm.contact.add', {
-    fields: {
-      NAME: nome,
-      OPENED: 'Y',
-      TYPE_ID: 'CLIENT',
-      SOURCE_ID: sourceId,
-      ...(opcoes.responsavelId ? { ASSIGNED_BY_ID: opcoes.responsavelId } : {}),
-      ...(lead.whatsapp ? { PHONE: [{ VALUE: lead.whatsapp, VALUE_TYPE: 'MOBILE' }] } : {}),
-      ...(lead.email ? { EMAIL: [{ VALUE: lead.email, VALUE_TYPE: 'WORK' }] } : {}),
-    },
-    params: { REGISTER_SONET_EVENT: 'N' },
-  })
+
+  // O RESPONSÁVEL do card. Quando a reunião diz qual SDR é o dono do lead no QS,
+  // é ELE — senão o card fica com uma pessoa e o "Quem fez o agendamento?" com
+  // outra, e quem recebe a tarefa no Bitrix é o responsável.
+  const doSdr = opcoes.reuniao?.sdr
+    ? await usuarioDoSdr(base, opcoes.reuniao.sdr, opcoes.sdrIds ?? [])
+    : null
+  const responsavelId = doSdr || opcoes.responsavelId || null
+
+  // Já existe? Reusa. Ver `contatoExistente`.
+  const jaExiste = await contatoExistente(base, lead)
+  const contato = jaExiste
+    ? { ok: true, result: jaExiste.id }
+    : await chamar(base, 'crm.contact.add', {
+      fields: {
+        NAME: nome,
+        OPENED: 'Y',
+        TYPE_ID: 'CLIENT',
+        SOURCE_ID: sourceId,
+        ...(responsavelId ? { ASSIGNED_BY_ID: responsavelId } : {}),
+        ...(lead.whatsapp ? { PHONE: [{ VALUE: lead.whatsapp, VALUE_TYPE: 'MOBILE' }] } : {}),
+        ...(lead.email ? { EMAIL: [{ VALUE: lead.email, VALUE_TYPE: 'WORK' }] } : {}),
+      },
+      params: { REGISTER_SONET_EVENT: 'N' },
+    })
   if (!contato.ok) return { ok: false, etapa: 'contato', ...contato }
 
   const titulo = opcoes.tituloNegocio
@@ -319,12 +427,13 @@ export async function criarLead(base, lead, opcoes = {}) {
       OPENED: 'Y',
       SOURCE_ID: sourceId,
       ...camposReuniao,
-      COMMENTS: observacoes(lead, opcoes.camposExtras ?? [], pulados),
+      COMMENTS: observacoes(lead, opcoes.camposExtras ?? [], pulados,
+        jaExiste ? `Contato ${jaExiste.id} reaproveitado (achado por ${jaExiste.por === 'PHONE' ? 'telefone' : 'e-mail'})` : null),
       // Sem responsavel explicito o negocio nasce no dono do webhook — ou
       // seja, todos os leads da live cairiam numa pessoa so, fora da fila das
       // SDRs. O contato tambem vai pro mesmo responsavel, senao contato e
       // negocio ficam com donos diferentes.
-      ...(opcoes.responsavelId ? { ASSIGNED_BY_ID: opcoes.responsavelId } : {}),
+      ...(responsavelId ? { ASSIGNED_BY_ID: responsavelId } : {}),
     },
     params: { REGISTER_SONET_EVENT: 'N' },
   })
@@ -334,7 +443,40 @@ export async function criarLead(base, lead, opcoes = {}) {
     return { ok: false, etapa: 'negocio', contatoId: contato.result, ...negocio }
   }
 
-  return { ok: true, contatoId: contato.result, negocioId: negocio.result, reuniaoPulados: pulados }
+  return {
+    ok: true,
+    contatoId: contato.result,
+    negocioId: negocio.result,
+    reuniaoPulados: pulados,
+    contatoReaproveitado: jaExiste ? jaExiste.id : null,
+    responsavelId,
+    responsavelVeioDoSdr: Boolean(doSdr),
+  }
+}
+
+/**
+ * O card JA EXISTE (foi aberto pelo resgate) e a pessoa acabou de agendar:
+ * move de coluna e preenche a reunião, em vez de abrir um segundo card.
+ *
+ * A ORDEM aqui é o contrário da criação, e por um motivo: no `crm.deal.add` os
+ * campos vão junto porque é a chegada na coluna que dispara o aviso do Bitrix.
+ * Aqui o card já está no funil, então um `update` só — com etapa E campos na
+ * mesma chamada — mantém a mesma garantia: quando o robô olhar, está tudo lá.
+ */
+export async function atualizarNegocioDaReuniao(base, negocioId, { funil, reuniao, comentario }) {
+  const { fields: camposReuniao, pulados } = await camposDaReuniao(base, reuniao)
+  const r = await chamar(base, 'crm.deal.update', {
+    id: String(negocioId),
+    fields: {
+      CATEGORY_ID: funil.categoryId,
+      STAGE_ID: funil.stageId,
+      ...camposReuniao,
+      ...(comentario ? { COMMENTS: comentario } : {}),
+    },
+    params: { REGISTER_SONET_EVENT: 'N' },
+  })
+  if (!r.ok) return { ok: false, etapa: 'negocio', ...r }
+  return { ok: true, negocioId: String(negocioId), reuniaoPulados: pulados, atualizado: true }
 }
 
 /**

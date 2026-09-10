@@ -543,6 +543,136 @@ await teste('lead que NAO agendou nao leva campo de reuniao nenhum', async () =>
   assert.ok(!f.COMMENTS.includes('O aviso da reunião'), 'nem recado de reuniao')
 })
 
+await teste('armadilha preenchida: descarta sem criar nada, e sem denunciar', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const req = leadAgendado()
+  req.body.site = 'http://spam.example'
+  const r = resFalso()
+  await saveLead(req, r)
+  assert.equal(r._status, 200, 'responde como se tivesse dado certo')
+  assert.equal(chamadas.filter((c) => c.metodo.startsWith('crm.')).length, 0, 'nao toca no CRM')
+})
+
+await teste('contato que JA existe e reaproveitado, nao duplicado', async () => {
+  // Quem assiste duas lives e agenda nas duas era duas pessoas no CRM.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({
+    'crm.duplicate.findbycomm': jsonOk({ CONTACT: [4242] }),
+    'crm.contact.add': jsonOk(77),
+    'crm.deal.add': jsonOk(88),
+  })
+  await saveLead(leadAgendado(), resFalso())
+  assert.equal(chamadas.filter((c) => c.metodo === 'crm.contact.add').length, 0, 'nao cria contato')
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  assert.equal(deal.corpo.fields.CONTACT_ID, '4242')
+  assert.ok(deal.corpo.fields.COMMENTS.includes('4242'), 'o card diz que reaproveitou')
+})
+
+await teste('busca de duplicado fora do ar: cria o contato, nao perde o lead', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({
+    'crm.duplicate.findbycomm': jsonErro('QUERY_LIMIT_EXCEEDED', 'muitas chamadas'),
+    'crm.contact.add': jsonOk(77),
+    'crm.deal.add': jsonOk(88),
+  })
+  const r = resFalso()
+  await saveLead(leadAgendado(), r)
+  assert.equal(r._status, 200)
+  assert.ok(chamadas.find((c) => c.metodo === 'crm.contact.add'), 'falha aberta: cria')
+})
+
+await teste('o card fica no nome do SDR do QS, nao no do rodizio', async () => {
+  // Eram dois rodizios: o responsavel do card saia de um, o dono do lead no QS
+  // de outro. No mesmo card, "Quem fez o agendamento?" dizia uma pessoa e o
+  // responsavel era outra — e e o responsavel que recebe tarefa no Bitrix.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  process.env.BITRIX_SDR_IDS = '20781,17191,2329'
+  delete process.env.SUPABASE_FORMS_URL
+  delete process.env.SUPABASE_FORMS_KEY
+  const GENTE = {
+    20781: { ID: '20781', NAME: 'Victor', LAST_NAME: 'Hugo' },
+    17191: { ID: '17191', NAME: 'Mariana', LAST_NAME: 'Rodrigues' },
+    2329: { ID: '2329', NAME: 'Yanca', LAST_NAME: 'Manuella Ruivo' },
+  }
+  const chamadas = stubBitrix({
+    'crm.contact.add': jsonOk(77),
+    'crm.deal.add': jsonOk(88),
+  })
+  // `user.get` responde pelo ID pedido, como o Bitrix faz.
+  const fetchBase = globalThis.fetch
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).endsWith('user.get.json')) {
+      const pedido = JSON.parse(opts.body || '{}').ID
+      return { ok: true, status: 200, json: async () => ({ result: [GENTE[pedido]].filter(Boolean) }) }
+    }
+    return fetchBase(url, opts)
+  }
+  const req = leadAgendado()
+  req.body.reuniao_sdr = 'Mariana'
+  await saveLead(req, resFalso())
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  const contato = chamadas.find((c) => c.metodo === 'crm.contact.add')
+  assert.equal(deal.corpo.fields.ASSIGNED_BY_ID, '17191', 'o card e da Mariana')
+  assert.equal(contato.corpo.fields.ASSIGNED_BY_ID, '17191', 'contato e negocio na mesma pessoa')
+  delete process.env.BITRIX_SDR_IDS
+})
+
+await teste('o QS aprende o numero do card, pelo cracha', async () => {
+  // Sem isto, `qs_leads.bitrix_id` fica nulo e desfecho/no-show/SAL nunca voltam
+  // pro card: o /api/bitrix-sync do QS responde skipped_no_bitrix_id, calado.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const req = leadAgendado()
+  req.body.reuniao_vinculo = 'v1.corpo.assinatura'
+  await saveLead(req, resFalso())
+  const aviso = chamadas.find((c) => c.url.includes('/api/lead-bitrix'))
+  assert.ok(aviso, 'tem que avisar o QS')
+  assert.equal(aviso.corpo.vinculo, 'v1.corpo.assinatura')
+  assert.equal(aviso.corpo.bitrix_id, '88')
+  assert.ok(!('lead_id' in aviso.corpo), 'id de lead NUNCA sai do navegador pra ca')
+})
+
+await teste('formulario antigo (sem cracha) nao chama o QS', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const req = leadAgendado()
+  delete req.body.reuniao_vinculo
+  const r = resFalso()
+  await saveLead(req, r)
+  assert.equal(r._status, 200, 'e nao atrapalha o lead')
+  assert.ok(!chamadas.find((c) => c.url.includes('/api/lead-bitrix')))
+})
+
+await teste('QS fora do ar nao derruba o lead que ja agendou', async () => {
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const fetchBase = globalThis.fetch
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('/api/lead-bitrix')) throw new Error('qs fora')
+    return fetchBase(url, opts)
+  }
+  const req = leadAgendado()
+  req.body.reuniao_vinculo = 'v1.corpo.assinatura'
+  const r = resFalso()
+  await saveLead(req, r)
+  assert.equal(r._status, 200)
+  assert.equal(r._json.negocio, 88, 'o card criado continua sendo a resposta')
+  assert.ok(chamadas.find((c) => c.metodo === 'crm.deal.add'))
+})
+
+await teste('slug NUNCA registrado ainda leva a resposta da live e a reuniao', async () => {
+  // A allowlist por slug engolia `assistiu_live` e os `reuniao_*` em silencio.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const req = leadAgendado()
+  req.body.slug = 'live-que-ninguem-registrou'
+  await saveLead(req, resFalso())
+  const f = chamadas.find((c) => c.metodo === 'crm.deal.add').corpo.fields
+  assert.ok(f.COMMENTS.includes('assistiu_live'), 'a resposta da live nao pode ser descartada')
+  assert.equal(f[DATAHORA_MEET], '2026-09-11T18:00:00-03:00', 'e a reuniao tambem vai')
+})
+
 await teste('webhook sem escopo CRM e detectado pelo diagnostico', async () => {
   // A pegadinha: profile.json responde normal e todo crm.* falha.
   stubBitrix({ profile: jsonOk({ NAME: 'Bruno' }), scope: jsonOk(['']) })
