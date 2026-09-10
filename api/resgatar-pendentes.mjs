@@ -107,7 +107,39 @@ export default async function handler(req, res) {
 
   const feitos = []
   const falhas = []
+  const pulados = []
   for (const linha of pendentes) {
+    // JÁ AGENDOU COM ESSE TELEFONE? Então esta linha é fantasma.
+    //
+    // Quem preenche o formulário DUAS vezes (duas lives, ou uma desistência e um
+    // retorno) deixa a primeira linha parada: o `recuperado` é marcado por
+    // `lead_id`, que é o envio, não a pessoa. Medido em 10/09: 3 das 8 linhas do
+    // limbo eram assim, e sem esta conferência o resgate abriria card na
+    // Pré-Vendas pra gente que já tem reunião marcada.
+    try {
+      const jaFoi = await sb(
+        `${TABELA}?select=lead_id&whatsapp=eq.${encodeURIComponent(linha.whatsapp)}` +
+        '&recuperado=is.true&limit=1',
+      )
+      if (jaFoi.ok) {
+        const linhas = await jaFoi.json()
+        if (Array.isArray(linhas) && linhas.length) {
+          await sb(`${TABELA}?lead_id=eq.${encodeURIComponent(linha.lead_id)}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ recuperado: true, motivo: 'agendou em outro envio' }),
+          })
+          pulados.push({ lead_id: linha.lead_id, motivo: 'esse telefone já agendou' })
+          continue
+        }
+      }
+    } catch (e) {
+      // Não deu pra conferir: NÃO resgata. Card duplicado é pior do que esperar
+      // a próxima hora.
+      console.warn('[resgate] não deu pra conferir se já agendou:', e?.message)
+      pulados.push({ lead_id: linha.lead_id, motivo: 'não deu pra conferir' })
+      continue
+    }
+
     // O `lead` guardado na fase 1 é o payload inteiro (com UTMs e a resposta da
     // live). Reaproveitar é o que faz o card resgatado nascer igual aos outros —
     // remontar um lead "resumido" aqui perderia a origem do tráfego pago.
@@ -151,6 +183,6 @@ export default async function handler(req, res) {
     feitos.push({ lead_id: linha.lead_id, negocio: r.negocioId })
   }
 
-  console.log('[resgate]', feitos.length, 'resgatados,', falhas.length, 'falhas,', 'corte', horas + 'h')
-  res.status(200).json({ ok: true, resgatados: feitos, falhas, esperando_horas: horas })
+  console.log('[resgate]', feitos.length, 'resgatados,', pulados.length, 'pulados,', falhas.length, 'falhas,', 'corte', horas + 'h')
+  res.status(200).json({ ok: true, resgatados: feitos, pulados, falhas, esperando_horas: horas })
 }
