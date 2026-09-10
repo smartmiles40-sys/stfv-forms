@@ -36,10 +36,8 @@ export default async function handler(req, res) {
     return
   }
 
-  // Senha em tempo constante + teto de tentativas por IP. Publicar e o poder
-  // mais alto daqui (troca o formulario que esta no ar), entao o teto e o mais
-  // apertado: 10 por hora.
-  const portao = await portaoDaSenha(req, { teto: 10 })
+  // Senha em tempo constante + teto de tentativas ERRADAS por IP (10/h).
+  const portao = await portaoDaSenha(req)
   if (portao) {
     res.status(portao.status).json(portao.corpo)
     return

@@ -71,19 +71,22 @@ export async function dentroDoTeto(chave, teto) {
  * O portão das rotas com senha. Devolve `null` quando pode seguir, ou
  * `{ status, corpo }` pra devolver como resposta.
  *
- * A ORDEM importa: conta a tentativa ANTES de comparar a senha. Contar só as
- * erradas deixaria o ataque livre pra tentar 1000 vezes desde que acertasse uma.
+ * SÓ O ERRO CONTA, e essa ordem é o ponto. A primeira versão contava toda
+ * tentativa, inclusive as certas — e o painel faz duas chamadas por
+ * carregamento, então quem estivesse trabalhando normalmente se trancaria em
+ * quinze recarregadas. Contando só o erro, o teto pode ser BAIXO (10 por hora,
+ * que é pouco pra quem chuta e infinito pra quem sabe a senha) e ninguém se
+ * tranca com a senha certa na mão.
  */
-export async function portaoDaSenha(req, { teto = 20 } = {}) {
+export async function portaoDaSenha(req, { teto = 10 } = {}) {
   const SENHA = process.env.PUBLICAR_SENHA
   if (!SENHA) return { status: 503, corpo: { ok: false, erro: 'nao_configurado' } }
 
   const recebida = req.headers?.['x-stfv-senha'] ?? req.query?.senha
-  if (!(await dentroDoTeto(`senha:${chaveIp(req)}`, teto))) {
-    return { status: 429, corpo: { ok: false, erro: 'muitas_tentativas' } }
-  }
-  if (!senhaConfere(recebida, SENHA)) {
-    return { status: 401, corpo: { ok: false, erro: 'senha_invalida' } }
-  }
-  return null
+  if (senhaConfere(recebida, SENHA)) return null
+
+  const dentro = await dentroDoTeto(`senha:${chaveIp(req)}`, teto)
+  return dentro
+    ? { status: 401, corpo: { ok: false, erro: 'senha_invalida' } }
+    : { status: 429, corpo: { ok: false, erro: 'muitas_tentativas' } }
 }

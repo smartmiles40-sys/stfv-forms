@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     res.status(503).json({ ok: false, erro: 'nao_configurado' })
     return
   }
-  const portao = await portaoDaSenha(req, { teto: 30 })
+  const portao = await portaoDaSenha(req)
   if (portao) {
     res.status(portao.status).json(portao.corpo)
     return

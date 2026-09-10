@@ -14,7 +14,7 @@ import { portaoDaSenha } from './_portao.mjs'
 export default async function handler(req, res) {
   // Aceita a senha por header ou por `?senha=` — este e o unico que se abre no
   // navegador, e e esse o jeito de conferir os campos em 30 segundos.
-  const portao = await portaoDaSenha(req, { teto: 30 })
+  const portao = await portaoDaSenha(req)
   if (portao) {
     res.status(portao.status).json(portao.corpo)
     return

@@ -61,7 +61,7 @@ export default async function handler(req, res) {
     console.warn('[resgate] rodando sem CRON_SECRET — configure a env var pra fechar esta porta')
   }
   if (!ehCron) {
-    const portao = await portaoDaSenha(req, { teto: 20 })
+    const portao = await portaoDaSenha(req)
     if (portao) {
       res.status(portao.status).json(portao.corpo)
       return
