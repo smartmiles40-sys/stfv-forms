@@ -58,6 +58,16 @@ const FORMS = {
   japao: { campos: CAMPOS_LIVE, soComAgendamento: true },
   egito: { campos: CAMPOS_LIVE, soComAgendamento: true },
   peru: { campos: CAMPOS_LIVE, soComAgendamento: true },
+  // Formularios POS-LIVE (16/09): vao junto com a gravacao pra quem nao assistiu
+  // e marcam uma LIGACAO de 5 min com o SDR, nao reuniao com o closer. Mesma
+  // regra de duas fases: o card so nasce quando a pessoa escolhe o horario.
+  'amalfitana-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
+  'tailandia-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
+  'turquia-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
+  'islandia-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
+  'japao-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
+  'egito-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
+  'peru-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
   live: { campos: CAMPOS_LIVE },
   exemplo: { campos: CAMPOS_LIVE },
 }
@@ -384,6 +394,51 @@ export default async function handler(req, res) {
     link: lead.reuniao_link || '',
     produto: lead.expedicao || '',
     email: lead.email || '',
+  }
+
+  // ── LIGACAO COM O SDR (formulario pos-live, 16/09) ────────────────────────
+  // A pessoa marcou 5 minutos com o SDR, nao reuniao com o especialista. O card
+  // nasce na Pre-Vendas, coluna Novo Lead, no nome do SDR — e SEM os campos de
+  // reuniao: sao eles que disparam o aviso de reuniao do Bitrix pro closer.
+  // 'closer' aqui = a pessoa ja tinha reuniao marcada; segue o caminho normal.
+  const ligacaoSdr = agendou && str(body.agenda_com, 10) === 'sdr'
+  if (ligacaoSdr) {
+    const pendente = await pendenteDoLead(lead.lead_id)
+    // Ja tinha ligacao marcada (voltou e marcou de novo) ou o resgate ja abriu o
+    // card: nao abre outro. O QS ja sabe da ligacao; so aprende o numero do card.
+    if (pendente?.bitrix_id || body.agenda_ja_existia === true) {
+      await marcarRecuperado(lead.lead_id)
+      if (pendente?.bitrix_id) await avisarQsDoCard(lead.reuniao_vinculo, pendente.bitrix_id)
+      res.status(200).json({ ok: true, negocio: pendente?.bitrix_id ?? null, ligacao_sdr: true, sem_card_novo: true })
+      return
+    }
+    const r = await criarLead(base, lead, {
+      categoryId: process.env.BITRIX_CATEGORY_ID || FUNIL_PADRAO.categoryId,
+      stageId: process.env.BITRIX_STAGE_ID || FUNIL_PADRAO.stageId,
+      responsavelId: await proximaSdr(),
+      sdrNome: lead.reuniao_sdr || null,
+      sourceId: lead.source_id || process.env.BITRIX_SOURCE_ID || 'WEB',
+      camposExtras: campos.filter(
+        (c) => !['nome', 'email', 'whatsapp', 'source_id', 'fonte'].includes(c) && !c.startsWith('reuniao_'),
+      ),
+      reuniao: null,
+      recado: `📞 LIGAÇÃO MARCADA pelo cliente no formulário pós-live: ${lead.reuniao_quando || '(horário no QS)'}`
+        + (lead.reuniao_sdr ? ` · SDR: ${lead.reuniao_sdr}` : '')
+        + '\nLigação rápida (5 min) pelo WhatsApp. Qualificar antes de marcar com o especialista.',
+      sdrIds: idsDoRodizio(),
+    })
+    if (r.ok) {
+      console.log('[bitrix] negocio', r.negocioId, 'LIGACAO SDR ->', lead.reuniao_sdr || '(rodizio)', r.responsavelVeioDoSdr ? '' : '(SDR nao casou por nome)')
+      await marcarRecuperado(lead.lead_id)
+      await avisarQsDoCard(lead.reuniao_vinculo, r.negocioId)
+      res.status(200).json({ ok: true, negocio: r.negocioId, ligacao_sdr: true })
+      return
+    }
+    const motivo = `${r.etapa}: ${r.erro} ${r.descricao ?? ''}`.trim()
+    console.error('[bitrix] ligacao SDR falhou —', motivo)
+    const guardado = await guardarPendente(lead, motivo)
+    res.status(guardado ? 200 : 502).json({ ok: guardado, error: 'bitrix_recusou' })
+    return
   }
 
   const jaResgatado = agendou ? await pendenteDoLead(lead.lead_id) : null

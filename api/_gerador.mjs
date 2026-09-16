@@ -683,8 +683,9 @@ function gerarHtml(spec) {
     p("  // especialista, sala do Meet e o card do Bitrix atualizado.");
     p(`  var QS_ORIGEM = '${origemDe(spec.destino.agendamentoUrl)}';`);
     p("");
+    const comSdr = agendaComSdr(spec.destino.agendamentoUrl);
     p("  function renderAgendamento(respostas, jaNoBitrix, payload) {");
-    p(`    var url = QS_ORIGEM + '${caminhoDe(spec.destino.agendamentoUrl)}?embed=1&expedicao=' +`);
+    p(`    var url = QS_ORIGEM + '${caminhoDe(spec.destino.agendamentoUrl)}?${comSdr ? "com=sdr&" : ""}embed=1&expedicao=' +`);
     p("      encodeURIComponent(CAMPOS_FIXOS.expedicao || '');");
     p("");
     p("    raiz.innerHTML =");
@@ -729,7 +730,7 @@ function gerarHtml(spec) {
     p("      }");
     p("");
     p("      if (e.data.tipo === 'qs-agendar:concluido') {");
-    p("        pushDataLayer('reuniao_agendada', { form_name: FORM_NAME, destino: SLUG });");
+    p(comSdr ? "        pushDataLayer('ligacao_agendada', { form_name: FORM_NAME, destino: SLUG });" : "        pushDataLayer('reuniao_agendada', { form_name: FORM_NAME, destino: SLUG });");
     p("        // AGORA o lead vai pro Bitrix. Antes daqui ele so ficou guardado:");
     p("        // o negocio nasce quando a pessoa TERMINA o funil, nao quando ela");
     p("        // digita o nome. Nasce ja no funil comercial, na coluna de reuniao,");
@@ -756,7 +757,17 @@ function gerarHtml(spec) {
     p("              // Cracha assinado pelo servidor do QS. Passa por aqui sem ser");
     p("              // lido: e com ele que o backend diz ao QS qual e o numero do");
     p("              // card, sem o navegador nunca ter na mao um id de lead.");
-    p("              reuniao_vinculo: e.data.vinculo || ''");
+    if (comSdr) {
+      p("              reuniao_vinculo: e.data.vinculo || '',");
+      p("              // Ligacao com o SDR: o card nasce na Pre-Vendas (Novo Lead), no");
+      p("              // nome do SDR, e SEM os campos de reuniao \u2014 sao eles que disparam o");
+      p("              // aviso de reuniao do Bitrix pro especialista. 'closer' = a pessoa ja");
+      p("              // tinha reuniao marcada, e ai vale o caminho de sempre.");
+      p("              agenda_com: e.data.com || 'sdr',");
+      p("              agenda_ja_existia: e.data.ja_existia === true");
+    } else {
+      p("              reuniao_vinculo: e.data.vinculo || ''");
+    }
     p("            }))");
     p("          });");
     p("        } catch (err) { /* o QS ja tem a reuniao; o card entra pela lista de espera */ }");
@@ -888,6 +899,13 @@ function origemDe(url) {
     return new URL(url).origin;
   } catch {
     return "https://qs-turis.vercel.app";
+  }
+}
+function agendaComSdr(url) {
+  try {
+    return new URL(url).searchParams.get("com") === "sdr";
+  } catch {
+    return false;
   }
 }
 function caminhoDe(url) {

@@ -582,6 +582,46 @@ await teste('busca de duplicado fora do ar: cria o contato, nao perde o lead', a
   assert.ok(chamadas.find((c) => c.metodo === 'crm.contact.add'), 'falha aberta: cria')
 })
 
+await teste('ligacao com SDR: Pre-Vendas/Novo Lead, no nome dela, sem campo de reuniao', async () => {
+  // Formulario pos-live (16/09): quem nao assistiu marca 5 min com o SDR. Os
+  // campos de reuniao sao o gatilho do aviso pro especialista — aqui NAO podem ir.
+  process.env.BITRIX_WEBHOOK_URL = BITRIX
+  process.env.BITRIX_SDR_IDS = '20781,17191,2329'
+  delete process.env.BITRIX_CATEGORY_ID
+  delete process.env.BITRIX_STAGE_ID
+  delete process.env.SUPABASE_FORMS_URL
+  delete process.env.SUPABASE_FORMS_KEY
+  const chamadas = stubBitrix({ 'crm.contact.add': jsonOk(77), 'crm.deal.add': jsonOk(88) })
+  const fetchBase = globalThis.fetch
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).endsWith('user.get.json')) {
+      const pedido = JSON.parse(opts.body || '{}').ID
+      const gente = { 17191: { ID: '17191', NAME: 'Mariana', LAST_NAME: 'Rodrigues' } }
+      return { ok: true, status: 200, json: async () => ({ result: [gente[pedido]].filter(Boolean) }) }
+    }
+    return fetchBase(url, opts)
+  }
+  const req = leadAgendado()
+  req.body.agenda_com = 'sdr'
+  req.body.reuniao_especialista = ''
+  req.body.reuniao_link = ''
+  req.body.reuniao_quando = 'sexta-feira, 18/09 às 11:00'
+  const r = resFalso()
+  await saveLead(req, r)
+  assert.equal(r._status, 200)
+  const deal = chamadas.find((c) => c.metodo === 'crm.deal.add')
+  const f = deal.corpo.fields
+  assert.equal(String(f.CATEGORY_ID), '25', 'funil Pre-Vendas')
+  assert.equal(f.STAGE_ID, 'C25:PREPAYMENT_INVOIC', 'coluna Novo Lead')
+  assert.equal(f.ASSIGNED_BY_ID, '17191', 'no nome da SDR que vai ligar')
+  assert.equal(f.SOURCE_ID, 'LIVE_ITALIA', 'fonte da live preservada')
+  for (const campo of [DATAHORA_MEET, LINK_MEET, RESP_REUNIAO, SDR_AGENDOU]) {
+    assert.ok(!(campo in f), `${campo} nao pode ir numa ligacao com SDR`)
+  }
+  assert.ok(f.COMMENTS.includes('LIGAÇÃO MARCADA') && f.COMMENTS.includes('18/09'), 'o card diz a ligacao e o horario')
+  delete process.env.BITRIX_SDR_IDS
+})
+
 await teste('o card fica no nome do SDR do QS, nao no do rodizio', async () => {
   // Eram dois rodizios: o responsavel do card saia de um, o dono do lead no QS
   // de outro. No mesmo card, "Quem fez o agendamento?" dizia uma pessoa e o

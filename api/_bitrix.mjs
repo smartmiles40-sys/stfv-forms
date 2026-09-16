@@ -387,8 +387,12 @@ export async function criarLead(base, lead, opcoes = {}) {
   // O RESPONSÁVEL do card. Quando a reunião diz qual SDR é o dono do lead no QS,
   // é ELE — senão o card fica com uma pessoa e o "Quem fez o agendamento?" com
   // outra, e quem recebe a tarefa no Bitrix é o responsável.
-  const doSdr = opcoes.reuniao?.sdr
-    ? await usuarioDoSdr(base, opcoes.reuniao.sdr, opcoes.sdrIds ?? [])
+  // `sdrNome` (16/09): a LIGACAO com o SDR nao tem reuniao, mas tem dono — e o
+  // card tem que nascer no nome dele, senao cai no rodizio e outra SDR recebe a
+  // tarefa no Bitrix de um cliente que ja marcou horario com a colega.
+  const nomeSdr = opcoes.reuniao?.sdr || opcoes.sdrNome || null
+  const doSdr = nomeSdr
+    ? await usuarioDoSdr(base, nomeSdr, opcoes.sdrIds ?? [])
     : null
   const responsavelId = doSdr || opcoes.responsavelId || null
 
@@ -428,7 +432,10 @@ export async function criarLead(base, lead, opcoes = {}) {
       SOURCE_ID: sourceId,
       ...camposReuniao,
       COMMENTS: observacoes(lead, opcoes.camposExtras ?? [], pulados,
-        jaExiste ? `Contato ${jaExiste.id} reaproveitado (achado por ${jaExiste.por === 'PHONE' ? 'telefone' : 'e-mail'})` : null),
+        [
+          opcoes.recado || null,
+          jaExiste ? `Contato ${jaExiste.id} reaproveitado (achado por ${jaExiste.por === 'PHONE' ? 'telefone' : 'e-mail'})` : null,
+        ].filter(Boolean).join('\n') || null),
       // Sem responsavel explicito o negocio nasce no dono do webhook — ou
       // seja, todos os leads da live cairiam numa pessoa so, fora da fila das
       // SDRs. O contato tambem vai pro mesmo responsavel, senao contato e

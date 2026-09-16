@@ -1,0 +1,120 @@
+{
+  "id": "form_pos_live_tailandia",
+  "nome": "Pós-live Tailândia — ligação com SDR",
+  "slug": "tailandia-gravada",
+  "etapas": [
+    {
+      "id": "etapa_dados",
+      "tipo": "campos",
+      "titulo": "Seus dados",
+      "textoBotao": "Escolher horário",
+      "video": {
+        "embedHtml": "",
+        "textoLiberado": "",
+        "travaSegundos": 0,
+        "textoBloqueado": ""
+      },
+      "campos": [
+        {
+          "id": "campo_nome",
+          "name": "nome",
+          "tipo": "texto",
+          "label": "Nome completo",
+          "erro": "Digite seu nome completo",
+          "ajuda": "",
+          "opcoes": [],
+          "largura": "cheia",
+          "valorFixo": "",
+          "obrigatorio": true,
+          "placeholder": ""
+        },
+        {
+          "id": "campo_whatsapp",
+          "name": "whatsapp",
+          "tipo": "whatsapp",
+          "label": "WhatsApp com DDD",
+          "erro": "",
+          "ajuda": "É por ele que a gente vai te ligar.",
+          "opcoes": [],
+          "largura": "cheia",
+          "valorFixo": "",
+          "obrigatorio": true,
+          "placeholder": "(11) 98765-4321"
+        },
+        {
+          "id": "campo_email",
+          "name": "email",
+          "tipo": "email",
+          "label": "E-mail",
+          "erro": "",
+          "ajuda": "",
+          "opcoes": [],
+          "largura": "cheia",
+          "valorFixo": "",
+          "obrigatorio": false,
+          "placeholder": "voce@email.com"
+        }
+      ]
+    }
+  ],
+  "destino": {
+    "url": "/api/save-lead",
+    "modo": "endpoint",
+    "slug": "tailandia-gravada",
+    "formName": "pos-live-tailandia-2026",
+    "aposEnvio": "agendamento",
+    "agendamentoUrl": "https://qs-turis.vercel.app/agendar/?com=sdr",
+    "agendamentoRotulo": "Horário da ligação",
+    "erroEnvio": "Não conseguimos enviar agora. Tente de novo em instantes — ou chame a gente no WhatsApp.",
+    "camposFixos": [
+      {
+        "id": "cf_source",
+        "name": "source_id",
+        "valor": "LIVE_TAILANDIA"
+      },
+      {
+        "id": "cf_fonte",
+        "name": "fonte",
+        "valor": "[Tailândia] - Live"
+      },
+      {
+        "id": "cf_exped",
+        "name": "expedicao",
+        "valor": "Tailândia"
+      }
+    ],
+    "redirectUrl": "https://wa.me/551148636051",
+    "regrasSaida": [],
+    "mensagemTitulo": "Falta só o horário!",
+    "mensagemTexto": "Escolha quando podemos te ligar. É uma ligação rápida, de 5 minutos, pelo WhatsApp.",
+    "whatsappHandoff": false,
+    "whatsappMensagem": ""
+  },
+  "tracking": {
+    "utms": [
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_term",
+      "utm_content"
+    ],
+    "clickIds": [
+      "utm_id",
+      "gclid",
+      "fbclid",
+      "gbraid",
+      "wbraid"
+    ],
+    "dataLayer": true,
+    "firstTouch": true,
+    "inputsOcultos": true,
+    "eventoConversao": "pos_live_lead",
+    "fallbackUtmContent": "pos-live-tailandia"
+  },
+  "aparencia": {
+    "cartao": true,
+    "rotuloEtapa": true,
+    "indicadorEtapas": true
+  },
+  "atualizadoEm": "2026-09-16T22:15:10.677Z"
+}

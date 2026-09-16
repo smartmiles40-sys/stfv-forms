@@ -117,6 +117,22 @@ for (const [nome, spec] of casos) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Ligacao com o SDR (16/09): a mesma agenda com `?com=sdr`. O formulario de
+// closer tem que sair IGUAL (sem nenhuma linha do modo SDR) — e o de SDR tem que
+// mandar o lead pra Pre-Vendas com o evento proprio no GTM.
+// ---------------------------------------------------------------------------
+{
+  const closer = gerarHtml(liveAgendando())
+  const sdrSpec = liveAgendando()
+  sdrSpec.destino = { ...sdrSpec.destino, agendamentoUrl: 'https://qs-turis.vercel.app/agendar/?com=sdr' }
+  const sdr = gerarHtml(sdrSpec)
+  exigir('sdr: iframe abre a agenda do SDR', sdr.includes("'/agendar/?com=sdr&embed=1&expedicao='"))
+  exigir('sdr: fase 2 diz que e ligacao com SDR', sdr.includes("agenda_com: e.data.com || 'sdr'"))
+  exigir('sdr: evento proprio no GTM', sdr.includes("pushDataLayer('ligacao_agendada'") && !sdr.includes("'reuniao_agendada'"))
+  exigir('closer: nenhuma linha do modo SDR', !closer.includes('agenda_com') && !closer.includes('com=sdr') && closer.includes("'reuniao_agendada'"))
+}
+
 if (falhasFallback) {
   console.error(`\n${falhasFallback} verificacao(oes) do caminho de falha falharam.`)
   process.exit(1)
