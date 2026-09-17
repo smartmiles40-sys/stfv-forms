@@ -575,3 +575,77 @@ export async function verificarBitrix(base) {
       : [],
   }
 }
+
+/**
+ * FUNIL TECNOLOGIA › coluna "Lives" (Bruno, 17/09/2026): TODO mundo que preenche
+ * um formulario de live vira card aqui, agende ou nao. E um REGISTRO de quem
+ * participou — nao substitui o caminho comercial (Pre-Vendas / Reuniao de
+ * Vendas), que segue igual.
+ *
+ * Os IDs foram lidos do portal: funil 33 = "Tecnologia", `C33:UC_NRHDYG` =
+ * "Lives". Coluna com id gerado (UC_*) nao se deduz — se alguem recriar a
+ * coluna, o id muda e o card cai na primeira coluna do funil, sem erro.
+ */
+export const FUNIL_LIVES = {
+  categoryId: process.env.BITRIX_CATEGORY_LIVES ?? '33',
+  stageId: process.env.BITRIX_STAGE_LIVES ?? 'C33:UC_NRHDYG',
+}
+
+/**
+ * Cria (ou reaproveita) o card da pessoa na coluna Lives.
+ *
+ * Sem duplicar: mesma pessoa (contato achado por telefone/e-mail) + mesma fonte
+ * (a live) ja com card nessa coluna = nao abre outro. Assim quem se inscreve na
+ * LP e depois preenche o formulario do fim da MESMA live fica com um card so;
+ * lives diferentes dao cards diferentes, um por live.
+ */
+export async function registrarNaColunaLives(base, lead, { sourceId, origem } = {}) {
+  const fonte = sourceId || 'WEB'
+  const nome = String(lead.nome || '').trim()
+
+  const jaExiste = await contatoExistente(base, lead)
+  if (jaExiste) {
+    const dup = await chamar(base, 'crm.deal.list', {
+      filter: {
+        CONTACT_ID: jaExiste.id,
+        CATEGORY_ID: FUNIL_LIVES.categoryId,
+        STAGE_ID: FUNIL_LIVES.stageId,
+        SOURCE_ID: fonte,
+      },
+      select: ['ID'],
+    })
+    const achado = dup.ok && Array.isArray(dup.result) ? dup.result[0] : null
+    if (achado) return { ok: true, negocioId: String(achado.ID), jaTinha: true }
+  }
+
+  const contato = jaExiste
+    ? { ok: true, result: jaExiste.id }
+    : await chamar(base, 'crm.contact.add', {
+      fields: {
+        NAME: nome,
+        OPENED: 'Y',
+        TYPE_ID: 'CLIENT',
+        SOURCE_ID: fonte,
+        ...(lead.whatsapp ? { PHONE: [{ VALUE: lead.whatsapp, VALUE_TYPE: 'MOBILE' }] } : {}),
+        ...(lead.email ? { EMAIL: [{ VALUE: lead.email, VALUE_TYPE: 'WORK' }] } : {}),
+      },
+      params: { REGISTER_SONET_EVENT: 'N' },
+    })
+  if (!contato.ok) return { ok: false, etapa: 'contato', ...contato }
+
+  const extras = ['expedicao', 'assistiu_live', 'form_name'].filter((c) => lead[c])
+  const negocio = await chamar(base, 'crm.deal.add', {
+    fields: {
+      TITLE: `${nome || 'Lead'} — ${lead.expedicao || lead.slug || 'live'} (live)`.slice(0, 250),
+      CONTACT_ID: contato.result,
+      CATEGORY_ID: FUNIL_LIVES.categoryId,
+      STAGE_ID: FUNIL_LIVES.stageId,
+      OPENED: 'Y',
+      SOURCE_ID: fonte,
+      COMMENTS: observacoes(lead, extras, [], origem ? `Entrou por: ${origem}` : null),
+    },
+    params: { REGISTER_SONET_EVENT: 'N' },
+  })
+  if (!negocio.ok) return { ok: false, etapa: 'negocio', contatoId: contato.result, ...negocio }
+  return { ok: true, negocioId: String(negocio.result), contatoId: contato.result }
+}

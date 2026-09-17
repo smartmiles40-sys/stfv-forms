@@ -16,7 +16,7 @@
 //    SUPABASE_FORMS_URL    (opcional) guarda lead que o Bitrix recusou
 //    SUPABASE_FORMS_KEY    (opcional) service_role do mesmo projeto
 
-import { criarLead, atualizarNegocioDaReuniao, FUNIL_PADRAO } from './_bitrix.mjs'
+import { criarLead, atualizarNegocioDaReuniao, registrarNaColunaLives, FUNIL_PADRAO } from './_bitrix.mjs'
 import { chaveIp, dentroDoTeto } from './_portao.mjs'
 import { idsDoRodizio, proximaSdr } from './_rodizio.mjs'
 
@@ -296,6 +296,28 @@ async function marcarRecuperado(leadId) {
   }
 }
 
+/**
+ * Card no funil Tecnologia › Lives. Nunca lança e nunca segura a resposta por
+ * mais que o timeout das chamadas: falhar aqui não pode custar o agendamento.
+ * Devolve só true/false pro navegador — o número do card fica no log.
+ */
+async function registrarLives(lead, origem) {
+  const base = process.env.BITRIX_WEBHOOK_URL
+  if (!base) return false
+  try {
+    const r = await registrarNaColunaLives(base, lead, { sourceId: lead.source_id, origem })
+    if (r.ok) {
+      console.log('[lives] negocio', r.negocioId, r.jaTinha ? '(ja existia)' : '(criado)', lead.lead_id)
+      return true
+    }
+    console.error('[lives] falhou —', r.etapa, r.erro, r.descricao ?? '', lead.lead_id)
+    return false
+  } catch (e) {
+    console.error('[lives] falhou —', e?.message, lead.lead_id)
+    return false
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ ok: false, error: 'method_not_allowed' })
@@ -367,11 +389,17 @@ export default async function handler(req, res) {
   // terminar o funil. Ver o comentario de `soComAgendamento` la em cima.
   const agendou = body.agendado === true || body.agendado === 'true'
   if (conf?.soComAgendamento && !agendou) {
-    const guardado = await guardarPendente(lead, 'aguardando_agendamento')
+    // Exceção (17/09): o card de REGISTRO no funil Tecnologia › Lives nasce já
+    // aqui, pra todo mundo — agende ou não. O card comercial continua só pra
+    // quem agenda. Os dois em paralelo: um não atrasa nem derruba o outro.
+    const [guardado, lives] = await Promise.all([
+      guardarPendente(lead, 'aguardando_agendamento'),
+      registrarLives(lead, `formulário ${slug}`),
+    ])
     // 200 mesmo sem conseguir guardar: segurar a pessoa numa tela de erro aqui
     // seria perder o agendamento que ela ainda vai fazer, que e o que importa.
     // O lead continua no log da funcao de qualquer jeito.
-    res.status(200).json({ ok: true, aguardando_agendamento: true, guardado })
+    res.status(200).json({ ok: true, aguardando_agendamento: true, guardado, lives })
     return
   }
 
