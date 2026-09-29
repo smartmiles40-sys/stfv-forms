@@ -31,7 +31,7 @@ function liveBifurcada(): FormSpec {
           id: 'regra_wa',
           campo: campo.name,
           valor: campo.opcoes[0].label,
-          url: 'https://wa.me/5511951251935',
+          url: 'https://qs-turis.vercel.app/api/whatsapp',
           whatsapp: true,
         },
         {

@@ -274,7 +274,7 @@ export function presetLive(): FormSpec {
         { id: uid('fixo'), name: 'source_id', valor: '' },
       ],
       aposEnvio: 'redirect',
-      redirectUrl: 'https://wa.me/5511951251935',
+      redirectUrl: 'https://qs-turis.vercel.app/api/whatsapp',
       whatsappHandoff: true,
       // As tres respostas vao pro mesmo lugar (decisao do Bruno), entao nao ha
       // o que bifurcar. A saida condicional continua existindo no gerador — e
