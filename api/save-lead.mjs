@@ -58,6 +58,7 @@ const FORMS = {
   japao: { campos: CAMPOS_LIVE, soComAgendamento: true },
   egito: { campos: CAMPOS_LIVE, soComAgendamento: true },
   peru: { campos: CAMPOS_LIVE, soComAgendamento: true },
+  china: { campos: CAMPOS_LIVE, soComAgendamento: true }, // live 29/10/2026
   // Formularios POS-LIVE (16/09): vao junto com a gravacao pra quem nao assistiu
   // e marcam uma LIGACAO de 5 min com o SDR, nao reuniao com o closer. Mesma
   // regra de duas fases: o card so nasce quando a pessoa escolhe o horario.
@@ -68,6 +69,7 @@ const FORMS = {
   'japao-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
   'egito-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
   'peru-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
+  'china-gravada': { campos: CAMPOS_LIVE, soComAgendamento: true },
   live: { campos: CAMPOS_LIVE },
   exemplo: { campos: CAMPOS_LIVE },
 }
