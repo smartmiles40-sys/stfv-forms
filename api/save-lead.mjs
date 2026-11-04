@@ -59,6 +59,7 @@ const FORMS = {
   egito: { campos: CAMPOS_LIVE, soComAgendamento: true },
   peru: { campos: CAMPOS_LIVE, soComAgendamento: true },
   china: { campos: CAMPOS_LIVE, soComAgendamento: true }, // live 29/10/2026
+  'pacote-japao': { campos: CAMPOS_LIVE, soComAgendamento: true }, // live do Pacote Japão Essencial 08/11/2026
   // Formularios POS-LIVE (16/09): vao junto com a gravacao pra quem nao assistiu
   // e marcam uma LIGACAO de 5 min com o SDR, nao reuniao com o closer. Mesma
   // regra de duas fases: o card so nasce quando a pessoa escolhe o horario.
