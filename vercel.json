@@ -24,6 +24,9 @@
     },
     { "source": "/((?!api/|f/).*)", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/save-lead.mjs": { "maxDuration": 60 }
+  },
   "crons": [
     { "path": "/api/resgatar-pendentes", "schedule": "17 * * * *" }
   ],

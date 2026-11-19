@@ -19,6 +19,7 @@
 import { criarLead, atualizarNegocioDaReuniao, registrarNaColunaLives, FUNIL_PADRAO } from './_bitrix.mjs'
 import { chaveIp, dentroDoTeto } from './_portao.mjs'
 import { idsDoRodizio, proximaSdr } from './_rodizio.mjs'
+import { lerIndicacao, registrarIndicacao } from './_indicacao.mjs'
 
 const TABELA_PENDENTES = 'stfv_leads_pendentes'
 
@@ -353,6 +354,21 @@ export default async function handler(req, res) {
   }
 
   const slug = str(body.slug, 40)
+
+  // ── INDICAÇÕES DA BLACK (19/11) ───────────────────────────────────────────
+  // Um envio = 1 indicadora + até 5 indicados; cada indicado vira um card.
+  // Mesma armadilha e mesmo teto por IP de cima. Ver api/_indicacao.mjs.
+  if (Array.isArray(body.indicados)) {
+    const v = lerIndicacao(body)
+    if (v.erro) {
+      res.status(400).json({ ok: false, error: v.erro })
+      return
+    }
+    const r = await registrarIndicacao(v, body, slug || 'indique')
+    res.status(200).json({ ok: true, recebidos: r.recebidos, criados: r.criados, descartados: v.descartados })
+    return
+  }
+
   const conf = FORMS[slug]
   // Slug desconhecido não é motivo pra descartar o lead: ele segue com os campos
   // básicos. Perder lead por erro de configuração nosso é o pior desfecho.
